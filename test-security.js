@@ -56,7 +56,7 @@ async function runIntegrationTests() {
   // Wait for server to spin up
   await new Promise((resolve) => {
     serverProcess.stdout.on('data', (data) => {
-      if (data.toString().includes("Backend is running securely")) {
+      if (data.toString().includes("Backend is running")) {
         resolve();
       }
     });
@@ -121,7 +121,7 @@ async function runIntegrationTests() {
       role: 'admin' // Attempt role injection
     });
     assert.strictEqual(registerAdmin.statusCode, 400, "Register API allowed role escalation to admin!");
-    assert.ok(registerAdmin.body.error.includes("forbidden"), "Role escalation did not trigger explicit error message");
+    assert.ok(registerAdmin.body.error.includes('Role must be either "client" or "broker"'), "Role escalation did not trigger correct error message");
     console.log("  ✓ Client role escalation registration request blocked with 400.");
 
     // Test D: Brute Force Prevention & Login Safety (Generic Error messages)

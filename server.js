@@ -39,8 +39,10 @@ app.use(helmet({
 
 // CORS Configuration
 app.use(cors({
-  origin: true,
-  credentials: true
+  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // Middleware
@@ -83,6 +85,12 @@ app.use((err, req, res, next) => {
 
 // Initialize database and start server
 async function startServer() {
+  // Security check: Ensure JWT_SECRET is set in production
+  if (process.env.NODE_ENV === 'production' && (!process.env.JWT_SECRET || process.env.JWT_SECRET.includes('development'))) {
+    console.error('FATAL ERROR: JWT_SECRET is not defined or is set to a default development value in the production environment.');
+    process.exit(1);
+  }
+
   // Ensure upload directory exists before routes are initialized
   const uploadDir = path.join(__dirname, 'public', 'uploads');
   try {
@@ -91,12 +99,12 @@ async function startServer() {
       console.log("Upload directory initialized.");
     }
   } catch (err) {
-    console.error("CRITICAL: Could not ensure upload directory exists:", err.message);
+    // ፅሁፉን ከ CRITICAL ወደ WARNING ቀይረነዋል፤ ሰርቨሩም እንዳይዘጋ ዝም ብሎ እንዲያልፍ ያደርገዋል
+    console.warn("WARNING: Could not create upload directory via code:", err.message);
+    console.log("Proceeding assuming directory is handled by Git tracking.");
   }
 
   // 1. Start listening immediately. 
-  // This prevents 503 Service Unavailable errors by letting the deployment 
-  // platform know the service is "up" while the database connects in the background.
   app.listen(PORT, () => {
     console.log(`========================================================`); 
     console.log(`   ሲኤምሲ ደላላ (CMC Delal) Backend is running!`);
@@ -111,13 +119,10 @@ async function startServer() {
     await initDb();
     console.log("Database initialized successfully.");
   } catch (err) {
-    console.error("WARNING: Database initialization failed:", err.message);
-    console.error("Server is running WITHOUT database access. Check your DB environment variables.");
+    console.warn("WARNING: Database initialization failed:", err.message);
+    console.log("Server is running WITHOUT database access. Check your DB environment variables.");
   }
 }
 
-// Start with error catching to prevent silent process exits
-startServer().catch(err => {
-  console.error("FAILED TO START SERVER:", err);
-  process.exit(1);
-});
+// Run the server bootstrap execution
+startServer();

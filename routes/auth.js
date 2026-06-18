@@ -143,7 +143,7 @@ router.post('/login', authLimiter, async (req, res) => {
     // Save in HTTP-only cookie
     res.cookie('token', token, {
       httpOnly: true,
-      secure: false, // Set to true if running over HTTPS in production
+      secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
       maxAge: 24 * 60 * 60 * 1000 // 24 hours
     });
