@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "build": "cd frontend && npm ci && npm run build && cp -r dist/* ../dist/",
+    "build": "cd frontend && npm ci && npm run build && mkdir -p ../dist && cp -r dist/* ../dist/",
     "test": "node test-security.js"
   },
   "dependencies": {
