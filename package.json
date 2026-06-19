@@ -1,0 +1,12 @@
+{
+  "name": "cmc-delala",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Secure and Premium Ethiopian Delal (Broker) Platform",
+  "scripts": {
+    "build": "cd frontend && npm install && npm run build",
+    "install:all": "cd frontend && npm install && cd ../backend && npm install",
+    "start": "cd backend && npm start",
+    "dev": "cd backend && npm run dev"
+  }
+}

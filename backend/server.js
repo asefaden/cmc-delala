@@ -84,6 +84,25 @@ app.use('/api/*', (req, res) => {
   res.status(404).json({ error: 'Endpoint not found.' });
 });
 
+// --- Serve Frontend (React SPA) ---
+// In production, serve the built frontend from ../dist (project root)
+const frontendDist = path.join(__dirname, '..', 'dist');
+if (fs.existsSync(frontendDist)) {
+  // Serve static assets (JS, CSS, images, etc.)
+  app.use(express.static(frontendDist));
+
+  // SPA catch-all: serve index.html for any non-API, non-file route
+  // This must come AFTER all other routes and static file serving
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(frontendDist, 'index.html'));
+  });
+} else {
+  console.warn('  ⚠ Frontend dist/ folder not found at:', frontendDist);
+  console.warn('    Build the frontend first: cd frontend && npm run build');
+  app.get('*', (req, res) => {
+    res.status(404).json({ error: 'Frontend not built. Run: cd frontend && npm run build' });
+  });
+}
 
 // Global Error Handler (4-arg signature tells Express this is an error handler)
 // eslint-disable-next-line no-unused-vars

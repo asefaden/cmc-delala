@@ -24,7 +24,7 @@ Thumbs.db
 *.swo
 
 # Build output
-frontend/dist/
+dist/
 
 # Test
 coverage/
