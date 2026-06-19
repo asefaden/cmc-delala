@@ -1,24 +1,34 @@
 {
-  "name": "cmc-delal",
+  "name": "cmc-delal-backend",
   "version": "1.0.0",
-  "description": "Secure and Premium Ethiopian Delal (Broker) Platform",
+  "description": "Secure and Premium Ethiopian Delal (Broker) Platform Backend API",
   "main": "server.js",
   "type": "commonjs",
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node test-security.js"
+    "test": "node test-security.js",
+    "audit": "npm audit --audit-level=high",
+    "clean": "rm -rf node_modules package-lock.json && npm install"
   },
   "dependencies": {
-    "bcryptjs": "^2.4.3",
-    "cookie-parser": "^1.4.7",
-    "cors": "^2.8.6",
-    "dotenv": "^17.4.2",
-    "express": "^4.22.2",
-    "express-rate-limit": "^7.5.1",
-    "helmet": "^7.2.0",
-    "jsonwebtoken": "^9.0.3",
-    "multer": "^1.4.5-lts.1",
-    "mysql2": "^3.22.5"
-  }
+    "bcryptjs": "2.4.3",
+    "cookie-parser": "1.4.7",
+    "cors": "2.8.6",
+    "dotenv": "17.4.2",
+    "express": "4.22.2",
+    "express-rate-limit": "7.5.1",
+    "helmet": "7.2.0",
+    "jsonwebtoken": "9.0.3",
+    "multer": "1.4.5-lts.1",
+    "mysql2": "3.22.5"
+  },
+  "devDependencies": {
+    "morgan": "1.10.0"
+  },
+  "private": true
 }

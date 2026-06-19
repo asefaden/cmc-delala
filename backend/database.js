@@ -4,19 +4,31 @@ require('dotenv').config();
 
 let pool;
 
-// Wrap SQLite methods in Promises
+/**
+ * Executes a write query (INSERT, UPDATE, DELETE)
+ */
 const dbRun = async (sql, params = []) => {
   if (!pool) throw new Error("Database connection pool not initialized.");
   const [result] = await pool.execute(sql, params);
-  return { id: result.insertId, changes: result.affectedRows };
+  // Safely mapping MySQL OkPacket structure
+  return { 
+    id: result.insertId || null, 
+    changes: result.affectedRows || 0 
+  };
 };
 
+/**
+ * Executes a query that returns a single row
+ */
 const dbGet = async (sql, params = []) => {
   if (!pool) throw new Error("Database connection pool not initialized.");
   const [rows] = await pool.execute(sql, params);
-  return rows[0];
+  return rows.length > 0 ? rows[0] : null;
 };
 
+/**
+ * Executes a query that returns all rows
+ */
 const dbAll = async (sql, params = []) => {
   if (!pool) throw new Error("Database connection pool not initialized.");
   const [rows] = await pool.execute(sql, params);
@@ -30,15 +42,15 @@ async function initDb() {
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
-    port: parseInt(process.env.DB_PORT) || 3306,
+    port: parseInt(process.env.DB_PORT, 10) || 3306,
     waitForConnections: true,
-    connectionLimit: 10
+    connectionLimit: 10,
+    queueLimit: 0
   });
 
   // Verify connection immediately
   try {
     const connection = await pool.getConnection();
-    // Connection verified
     connection.release();
   } catch (err) {
     throw new Error(`Database connection failed: ${err.message}`);
@@ -59,10 +71,10 @@ async function initDb() {
       bio TEXT,
       avatar TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
+    ) ENGINE=InnoDB
   `);
 
-  // 2. Listings Table
+  // 2. Listings Table (Optimized with JSON Column)
   await dbRun(`
     CREATE TABLE IF NOT EXISTS listings (
       id INT AUTO_INCREMENT PRIMARY KEY,
@@ -74,14 +86,14 @@ async function initDb() {
       price DOUBLE NOT NULL,
       currency VARCHAR(10) DEFAULT 'ETB',
       location VARCHAR(255) NOT NULL,
-      images TEXT, -- JSON array of image URLs/strings
+      images JSON NULL,
       status VARCHAR(20) DEFAULT 'active',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (broker_id) REFERENCES users(id) ON DELETE CASCADE
-    )
+    ) ENGINE=InnoDB
   `);
 
-  // 3. Reviews Table (clients reviewing brokers)
+  // 3. Reviews Table
   await dbRun(`
     CREATE TABLE IF NOT EXISTS reviews (
       id INT AUTO_INCREMENT PRIMARY KEY,
@@ -92,8 +104,8 @@ async function initDb() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (broker_id) REFERENCES users(id) ON DELETE CASCADE,
       FOREIGN KEY (client_id) REFERENCES users(id) ON DELETE CASCADE,
-      UNIQUE(broker_id, client_id)
-    )
+      UNIQUE KEY unique_broker_client (broker_id, client_id)
+    ) ENGINE=InnoDB
   `);
 
   // 4. Verification Requests
@@ -111,7 +123,7 @@ async function initDb() {
     ) ENGINE=InnoDB
   `);
 
-  // 5. Security Logs (Audit Trail)
+  // 5. Security Logs
   await dbRun(`
     CREATE TABLE IF NOT EXISTS security_logs (
       id INT AUTO_INCREMENT PRIMARY KEY,
@@ -120,15 +132,14 @@ async function initDb() {
       ip_address VARCHAR(45),
       details TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
+    ) ENGINE=InnoDB
   `);
 
-  // Seed default data if users table is empty
+  // Seed default data safely if users table is completely empty
   const userCount = await dbGet("SELECT COUNT(*) as count FROM users");
-  if (userCount.count === 0) {
+  if (!userCount || userCount.count === 0) {
     console.log("  → Seeding initial data (first run)...");
 
-    // Password Hashing
     const adminHash = await bcrypt.hash("AdminPassword123!", 10);
     const broker1Hash = await bcrypt.hash("BrokerAbeba123!", 10);
     const broker2Hash = await bcrypt.hash("BrokerKebede123!", 10);
@@ -140,7 +151,7 @@ async function initDb() {
       VALUES (?, ?, ?, ?, 'admin', 1, 'System Administrator for CMC Delal', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150')
     `, ['admin@cmcdelal.com', adminHash, 'Assefa Demeke', '+251911000000']);
 
-    // 2. Seed Verified Broker (Almaz)
+    // 2. Seed Verified Broker (Abeba)
     const b1Result = await dbRun(`
       INSERT INTO users (email, password_hash, full_name, phone, role, verified, telegram_username, bio, avatar)
       VALUES (?, ?, ?, ?, 'broker', 1, 'abeba_delal', 'Professional Real Estate Broker in Addis Ababa with 5+ years of experience.', 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150')
@@ -158,75 +169,66 @@ async function initDb() {
       VALUES (?, ?, ?, ?, 'client', 0, 'Addis Ababa local looking for housing options.', 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150')
     `, ['abenezer@gmail.com', clientHash, 'Abenezer Yosef', '+251922334455']);
 
+    // Validate that IDs were captured properly before proceeding with relational insertions
+    if (b1Result.id && b2Result.id && cResult.id) {
+      
+      // 5. Seed Listings for Brokers
+      await dbRun(`
+        INSERT INTO listings (broker_id, title, description, category, type, price, currency, location, images)
+        VALUES (?, ?, ?, 'real_estate', 'rent', 45000, 'ETB', 'Bole Atlas', ?)
+      `, [
+        b1Result.id,
+        'Modern 2-Bedroom Apartment in Bole Atlas',
+        'Beautiful fully-furnished apartment. 2 bedrooms, 2 bathrooms, high-speed WiFi, backup generator, secure compound, and excellent view of the city.',
+        JSON.stringify(['https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800'])
+      ]);
 
-    // 5. Seed Listings for Brokers
-    // Real Estate listing for Almaz (Verified Broker)
-    await dbRun(`
-      INSERT INTO listings (broker_id, title, description, category, type, price, currency, location, images)
-      VALUES (?, ?, ?, 'real_estate', 'rent', 45000, 'ETB', 'Bole Atlas', ?)
-    `, [
-      b1Result.id,
-      'Modern 2-Bedroom Apartment in Bole Atlas',
-      'Beautiful fully-furnished apartment. 2 bedrooms, 2 bathrooms, high-speed WiFi, backup generator, secure compound, and excellent view of the city. Close to supermarkets and restaurants.',
-      JSON.stringify(['https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800'])
-    ]);
+      await dbRun(`
+        INSERT INTO listings (broker_id, title, description, category, type, price, currency, location, images)
+        VALUES (?, ?, ?, 'real_estate', 'sale', 12500000, 'ETB', 'Yeka (Megenagna)', ?)
+      `, [
+        b1Result.id,
+        'Spacious Townhouse for Sale in Yeka',
+        'Luxury townhouse with 4 bedrooms, service quarters, spacious modern kitchen, and parking space for 3 cars.',
+        JSON.stringify(['https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=800'])
+      ]);
 
-    await dbRun(`
-      INSERT INTO listings (broker_id, title, description, category, type, price, currency, location, images)
-      VALUES (?, ?, ?, 'real_estate', 'sale', 12500000, 'ETB', 'Yeka (Megenagna)', ?)
-    `, [
-      b1Result.id,
-      'Spacious Townhouse for Sale in Yeka',
-      'Luxury townhouse with 4 bedrooms, service quarters, spacious modern kitchen, and parking space for 3 cars. Gated community with 24/7 security.',
-      JSON.stringify(['https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=800'])
-    ]);
+      await dbRun(`
+        INSERT INTO listings (broker_id, title, description, category, type, price, currency, location, images)
+        VALUES (?, ?, ?, 'vehicle', 'sale', 3200000, 'ETB', 'Kirkos (Bole Road)', ?)
+      `, [
+        b2Result.id,
+        'Toyota Vitz 2018 - Excellent Condition',
+        'Engine size 1.0L, automatic transmission, fuel efficient, original left hand drive, low mileage (45,000 km).',
+        JSON.stringify(['https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800'])
+      ]);
 
-    // Car listing for Kebede (Unverified Broker)
-    await dbRun(`
-      INSERT INTO listings (broker_id, title, description, category, type, price, currency, location, images)
-      VALUES (?, ?, ?, 'vehicle', 'sale', 3200000, 'ETB', 'Kirkos (Bole Road)', ?)
-    `, [
-      b2Result.id,
-      'Toyota Vitz 2018 - Excellent Condition',
-      'Engine size 1.0L, automatic transmission, fuel efficient, original left hand drive, low mileage (45,000 km), no accidents. Clean paperwork and immediate transfer.',
-      JSON.stringify(['https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800'])
-    ]);
+      // 6. Seed sample review
+      await dbRun(`
+        INSERT INTO reviews (broker_id, client_id, rating, comment)
+        VALUES (?, ?, 5, 'Abeba was extremely professional and helped me secure my apartment in Bole Atlas within 3 days. Highly recommended!')
+      `, [b1Result.id, cResult.id]);
 
-    // Service listing for Kebede
-    await dbRun(`
-      INSERT INTO listings (broker_id, title, description, category, type, price, currency, location, images)
-      VALUES (?, ?, ?, 'services', 'job', 8000, 'ETB', 'Bole', ?)
-    `, [
-      b2Result.id,
-      'Reliable Housekeeping & Nanny Service',
-      'Experienced domestic assistant available. Cooking, laundry, cleaning, and babysitting services. Full background check completed. Reference available from previous expatriate family.',
-      JSON.stringify(['https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=800'])
-    ]);
-
-
-    // 6. Seed a sample review
-    await dbRun(`
-      INSERT INTO reviews (broker_id, client_id, rating, comment)
-      VALUES (?, ?, 5, 'Abeba was extremely professional and helped me secure my apartment in Bole Atlas within 3 days. Highly recommended!')
-    `, [b1Result.id, cResult.id]);
-
-    console.log("  → Seeded users, listings, and reviews.");
+      console.log("  → Seeded users, listings, and reviews successfully.");
+    }
   }
 }
 
 /**
- * Clears all tables and re-seeds the database.
- * Useful for development and testing.
+ * Clears all tables and re-seeds the database safely.
  */
 async function resetDb() {
   console.log("Resetting database...");
-  await dbRun("SET FOREIGN_KEY_CHECKS = 0");
-  await dbRun("TRUNCATE TABLE reviews");
-  await dbRun("TRUNCATE TABLE listings");
-  await dbRun("TRUNCATE TABLE verification_requests");
-  await dbRun("TRUNCATE TABLE security_logs");
-  await dbRun("TRUNCATE TABLE users");
-  await dbRun("SET FOREIGN_KEY_CHECKS = 1");
+  if (!pool) throw new Error("Database connection pool not initialized.");
+  
+  await pool.query("SET FOREIGN_KEY_CHECKS = 0");
+  await pool.query("TRUNCATE TABLE reviews");
+  await pool.query("TRUNCATE TABLE listings");
+  await pool.query("TRUNCATE TABLE verification_requests");
+  await pool.query("TRUNCATE TABLE security_logs");
+  await pool.query("TRUNCATE TABLE users");
+  await pool.query("SET FOREIGN_KEY_CHECKS = 1");
+  
   console.log("Database cleared. Re-seeding...");
   await initDb();
 }

@@ -8,27 +8,44 @@ const fs = require('fs');
 const { initDb } = require('./database');
 const { apiLimiter, logSecurityEvent, sanitizeBody } = require('./security');
 
+// STRICT CHECK: Fail loudly and immediately if JWT_SECRET is missing or insecure in production
+if (process.env.NODE_ENV === 'production') {
+  if (!process.env.JWT_SECRET || process.env.JWT_SECRET.includes('development')) {
+    console.error('FATAL ERROR: JWT_SECRET is not configured or uses a development default in production!');
+    console.error('Application startup aborted to prevent unpredictable token verification behavior.');
+    process.exit(1);
+  }
+} else {
+  // Safe fallback fallback ONLY for local development
+  process.env.JWT_SECRET = process.env.JWT_SECRET || 'dev_fallback_secret_only_for_local';
+}
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// 1. Health check endpoint - MUST be at the top for cloud platform uptime checks
+// Variables tracking operational health
+let isDbConnected = false;
+
+// 1. Health check endpoint - updated to reflect true database connectivity state
 app.get('/health', (req, res) => {
+  if (!isDbConnected) {
+    return res.status(503).json({ status: 'unhealthy', database: 'disconnected', timestamp: new Date().toISOString() });
+  }
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 // 2. Frontend configuration endpoint
 app.get('/config', (req, res) => {
-  // Treat '*' or empty as same-origin (no prefix needed)
   const raw = (process.env.API_BASE_URL || '').trim();
   res.json({ apiBaseUrl: (raw && raw !== '*') ? raw : '' });
 });
 
-// Set up security headers with helmet
+// Security headers via Helmet
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"], // allow inline scripts for quick SPA and Lucide icons
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
       imgSrc: ["'self'", "data:", "blob:", "https://images.unsplash.com", "https://*.unsplash.com"],
@@ -40,31 +57,31 @@ app.use(helmet({
 }));
 
 // CORS Configuration
-// When FRONTEND_URL is '*' or unset, allow all origins (for development or same-origin SPA).
-// When a specific URL is set, only allow that origin with credentials.
 const corsOrigin = process.env.FRONTEND_URL;
 const corsOptions = {
-  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 };
 
 if (!corsOrigin || corsOrigin === '*') {
-  // Allow all origins — credentials won't work with wildcard in browsers,
-  // but this is fine for same-origin SPA or development.
-  corsOptions.origin = true; // Reflect the request origin
+  if (process.env.NODE_ENV === 'production') {
+    console.warn('⚠️ WARNING: Allowing all origins in production without credentials.');
+  }
+  corsOptions.origin = '*';
+  corsOptions.credentials = false; // Cannot use credentials with a literal wildcard '*' securely or legally in modern browsers
 } else {
   corsOptions.origin = corsOrigin;
+  corsOptions.credentials = true;
 }
 
 app.use(cors(corsOptions));
 
-// Middleware
+// Standard Parsers
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// Sanitize all incoming request bodies to prevent XSS
+// Sanitize inputs
 app.use(sanitizeBody);
 
 // Apply global API rate limiter
@@ -76,7 +93,7 @@ app.use('/api/listings', require('./routes/listings'));
 app.use('/api/brokers', require('./routes/brokers'));
 app.use('/api/admin', require('./routes/admin'));
 
-// Serve uploaded files (avatars, documents)
+// Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // API 404 handler
@@ -85,41 +102,32 @@ app.use('/api/*', (req, res) => {
 });
 
 // --- Serve Frontend (React SPA) ---
-// In production, serve the built frontend from ../dist (project root)
 const frontendDist = path.join(__dirname, '..', 'dist');
 if (fs.existsSync(frontendDist)) {
-  // Serve static assets (JS, CSS, images, etc.)
   app.use(express.static(frontendDist));
-
-  // SPA catch-all: serve index.html for any non-API, non-file route
-  // This must come AFTER all other routes and static file serving
   app.get('*', (req, res) => {
     res.sendFile(path.join(frontendDist, 'index.html'));
   });
 } else {
   console.warn('  ⚠ Frontend dist/ folder not found at:', frontendDist);
-  console.warn('    Build the frontend first: cd frontend && npm run build');
   app.get('*', (req, res) => {
-    res.status(404).json({ error: 'Frontend not built. Run: cd frontend && npm run build' });
+    res.status(404).json({ error: 'Frontend not built. Run npm run build.' });
   });
 }
 
-// Global Error Handler (4-arg signature tells Express this is an error handler)
-// eslint-disable-next-line no-unused-vars
+// Global Error Handler
 app.use((err, req, res, next) => {
   console.error("Unhandled server error:", err);
   
-  // Log critical server crashes/errors in security logs
   logSecurityEvent('server_error', req.user ? req.user.id : null, req.ip, `Unhandled error: ${err.message}`)
     .catch(console.error);
 
   return res.status(500).json({ error: 'Something went wrong on the server.' });
 });
 
-// Handle uncaught exceptions and unhandled rejections to prevent silent container crashes
+// Graceful Process Interception
 process.on('uncaughtException', (err) => {
   console.error('FATAL: Uncaught Exception:', err);
-  // Give the process a moment to flush logs before exiting
   setTimeout(() => process.exit(1), 1000);
 });
 
@@ -127,30 +135,9 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('FATAL: Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
-// Initialize database and start server
+// Bootstrap Server Setup
 async function startServer() {
-  // Security check: Ensure JWT_SECRET is set in production
-  if (process.env.NODE_ENV === 'production' && (!process.env.JWT_SECRET || process.env.JWT_SECRET.includes('development'))) {
-    console.error('');
-    console.error('╔══════════════════════════════════════════════════════════════╗');
-    console.error('║                    FATAL CONFIGURATION ERROR                ║');
-    console.error('╠══════════════════════════════════════════════════════════════╣');
-    console.error('║  JWT_SECRET is not defined or is set to a default value.   ║');
-    console.error('║                                                            ║');
-    console.error('║  In production, you MUST set a strong, unique JWT_SECRET   ║');
-    console.error('║  as an environment variable in your hosting platform.      ║');
-    console.error('║                                                            ║');
-    console.error('║  Example (Coolify/Docker):                                 ║');
-    console.error('║    JWT_SECRET=<your-random-secret-here>                    ║');
-    console.error('║                                                            ║');
-    console.error('║  Generate one with: node -e "console.log(require(\'crypto\')  ║');
-    console.error('║    .randomBytes(64).toString(\'hex\'))"                       ║');
-    console.error('╚══════════════════════════════════════════════════════════════╝');
-    console.error('');
-    process.exit(1);
-  }
-
-  // Ensure upload directory exists before routes are initialized
+  // 1. Enforce upload directory existence
   const uploadDir = path.join(__dirname, 'uploads');
   try {
     if (!fs.existsSync(uploadDir)) {
@@ -158,48 +145,43 @@ async function startServer() {
       console.log("Upload directory initialized.");
     }
   } catch (err) {
-    // ፅሁፉን ከ CRITICAL ወደ WARNING ቀይረነዋል፤ ሰርቨሩም እንዳይዘጋ ዝም ብሎ እንዲያልፍ ያደርገዋል
     console.warn("WARNING: Could not create upload directory via code:", err.message);
-    console.log("Proceeding assuming directory is handled by Git tracking.");
   }
 
-  // 1. Start listening immediately on all interfaces (0.0.0.0) for Docker compatibility
+  // 2. Initialize database dependencies BEFORE opening the HTTP port to traffic
+  try {
+    await initDb();
+    isDbConnected = true;
+    console.log('  ✓ Database: Connected & schema ready');
+  } catch (err) {
+    console.error('  ✗ Database: FAILED —', err.message);
+    if (process.env.NODE_ENV === 'production') {
+      console.error('FATAL: Cannot start production server without database connection.');
+      process.exit(1);
+    }
+    console.warn('  Running in development fallback mode without DB...');
+  }
+
+  // 3. Start listening
   const server = app.listen(PORT, '0.0.0.0', () => {
     const env = process.env.NODE_ENV || 'development';
-    console.log('');
-    console.log('╔════════════════════════════════════════════════════════════╗');
+    console.log('\n╔════════════════════════════════════════════════════════════╗');
     console.log('║          ሲኤምሲ ደላላ (CMC Delal) Backend                  ║');
     console.log('╠════════════════════════════════════════════════════════════╣');
     console.log(`║  Status:    ✓ Running                                    ║`);
-    console.log(`║  Env:       ${(env).padEnd(45)}║`);
+    console.log(`║  Env:       ${env.padEnd(45)}║`);
     console.log(`║  URL:       ${('http://localhost:' + PORT).padEnd(45)}║`);
-    console.log('╠════════════════════════════════════════════════════════════╣');
-    console.log('║  Routes:   /api/auth, /api/listings, /api/brokers,       ║');
-    console.log('║            /api/admin, /health, /config                  ║');
-    console.log('╚════════════════════════════════════════════════════════════╝');
-    console.log('');
+    console.log('╚════════════════════════════════════════════════════════════╝\n');
   });
 
-  // Handle server errors (e.g., port already in use)
   server.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
-      console.error(`FATAL: Port ${PORT} is already in use. Cannot start server.`);
+      console.error(`FATAL: Port ${PORT} is already in use.`);
     } else {
       console.error('FATAL: Server error:', err);
     }
     process.exit(1);
   });
-
-  // 2. Initialize database asynchronously.
-  try {
-    await initDb();
-    console.log('  ✓ Database: Connected & schema ready');
-  } catch (err) {
-    console.warn('  ✗ Database: FAILED —', err.message);
-    console.warn('    Server is running WITHOUT database access. Check your DB environment variables.');
-    console.warn('    API endpoints requiring database will return 500 errors until DB is available.');
-  }
 }
 
-// Run the server bootstrap execution
 startServer();

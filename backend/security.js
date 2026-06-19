@@ -2,7 +2,11 @@ const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
 const { dbRun } = require('./database');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'cmc-delal-super-secret-key-development-2026';
+// CRITICAL: Ensure you do not leave a fallback secret string evaluated in production
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET && process.env.NODE_ENV === 'production') {
+  throw new Error('CRITICAL SECURITY CONFIGURATION ERROR: JWT_SECRET environment variable is missing.');
+}
 
 // 1. Audit Log Helper
 async function logSecurityEvent(eventType, userId, ipAddress, details) {
@@ -16,17 +20,14 @@ async function logSecurityEvent(eventType, userId, ipAddress, details) {
   }
 }
 
-// 2. Token generation
+// 2. Token generation (Optimized payload to avoid token bloat and stale data)
 function generateToken(user) {
   return jwt.sign(
     { 
       id: user.id, 
-      email: user.email, 
-      role: user.role, 
-      verified: user.verified,
-      full_name: user.full_name
+      role: user.role 
     },
-    JWT_SECRET,
+    JWT_SECRET || 'cmc-delal-super-secret-key-development-2026',
     { expiresIn: '24h' }
   );
 }
@@ -35,7 +36,6 @@ function generateToken(user) {
 function authenticate(req, res, next) {
   let token = req.cookies.token;
   
-  // Fallback to Bearer token header if client does not support cookie-based sessions
   if (!token && req.headers.authorization) {
     const parts = req.headers.authorization.split(' ');
     if (parts.length === 2 && parts[0] === 'Bearer') {
@@ -48,7 +48,7 @@ function authenticate(req, res, next) {
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET || 'cmc-delal-super-secret-key-development-2026');
     req.user = decoded;
     next();
   } catch (err) {
@@ -72,21 +72,34 @@ function authorizeRoles(...roles) {
   };
 }
 
-// 5. Input Sanitizer Middleware (Prevention against XSS)
+// 5. Input Sanitizer Middleware (Secure Context HTML Entity Encoding)
 function sanitizeText(str) {
   if (typeof str !== 'string') return str;
-  // Skip sanitization for URLs to prevent breaking avatar/image links
-  if (str.startsWith('http://') || str.startsWith('https://') || str.startsWith('/')) return str;
-  // Skip already-encoded strings to prevent double-encoding
+  
+  // Safely check if it's a URL structure WITHOUT dropping validation on trailing malicious injection strings
+  let isPlainUrl = false;
+  try {
+    const parsed = new URL(str);
+    // Only trust standard web protocols with no embedded markup signals
+    if ((parsed.protocol === 'http:' || parsed.protocol === 'https:') && !str.includes('<') && !str.includes('>')) {
+      isPlainUrl = true;
+    }
+  } catch (_) {
+    // If it fails parsing as a full URL, check if it's a local root static file path safely
+    if (str.startsWith('/') && !str.includes('..') && !str.includes('<') && !str.includes('>')) {
+      isPlainUrl = true;
+    }
+  }
+
+  if (isPlainUrl) return str;
   if (str.includes('\u0026amp;') || str.includes('\u0026lt;') || str.includes('\u0026#x27;')) return str;
-  // Encode dangerous HTML characters
-  let result = str;
-  result = result.replace(/&/g, '\u0026amp;');
-  result = result.replace(/</g, '\u0026lt;');
-  result = result.replace(/>/g, '\u0026gt;');
-  result = result.replace(/"/g, '\u0026quot;');
-  result = result.replace(/'/g, '\u0026#x27;');
-  return result;
+
+  return str
+    .replace(/&/g, '\u0026amp;')
+    .replace(/</g, '\u0026lt;')
+    .replace(/>/g, '\u0026gt;')
+    .replace(/"/g, '\u0026quot;')
+    .replace(/'/g, '\u0026#x27;');
 }
 
 function sanitizeBody(req, res, next) {
@@ -105,35 +118,29 @@ function sanitizeBody(req, res, next) {
   next();
 }
 
-// 6. Validation Helpers
+// 6. Secure Validation Helpers
 function validateEmail(email) {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
+  if (!email || typeof email !== 'string' || email.length > 254) return false;
+  // A clean, simple, production-standard check that completely mitigates catastrophic backtracking (ReDoS)
+  const simpleEmailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return simpleEmailRegex.test(email);
 }
 
 // Validates and normalizes Ethiopian phone numbers to "+2519xxxxxxxx" or "+2517xxxxxxxx"
 function validateAndNormalizePhone(phone) {
   if (!phone || typeof phone !== 'string') return null;
   
-  // Remove spaces, hyphens, and parentheses
   let cleaned = phone.replace(/[\s\-\(\)]/g, '');
   
-  // Format check: +251 9... / +251 7...
   if (cleaned.startsWith('+251')) {
     return /^\+251[79]\d{8}$/.test(cleaned) ? cleaned : null;
   }
-  
-  // Format check: 251 9... / 251 7...
   if (cleaned.startsWith('251')) {
     return /^251[79]\d{8}$/.test(cleaned) ? '+' + cleaned : null;
   }
-  
-  // Format check: 09... / 07...
   if (cleaned.startsWith('0')) {
     return /^0[79]\d{8}$/.test(cleaned) ? '+251' + cleaned.substring(1) : null;
   }
-  
-  // Format check: 9... / 7...
   if (/^[79]\d{8}$/.test(cleaned)) {
     return '+251' + cleaned;
   }
@@ -143,8 +150,8 @@ function validateAndNormalizePhone(phone) {
 
 // 7. Rate Limiters
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // Limit each IP to 10 register/login requests per windowMs
+  windowMs: 15 * 60 * 1000, 
+  max: 10, 
   message: { error: 'Too many authentication attempts. Please try again after 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -152,7 +159,7 @@ const authLimiter = rateLimit({
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100, // Limit each IP to 100 API requests per windowMs
+  max: 100, 
   message: { error: 'Too many API requests. Please slow down.' },
   standardHeaders: true,
   legacyHeaders: false,
