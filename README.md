@@ -2,39 +2,52 @@
 
 **Secure Ethiopian Broker (Delal) Platform**
 
-## 🚀 One service — that's it
+## 🚀 Deploy on AletCloud (2 minutes)
 
-**You deploy ONE service.** Not two. The backend Express server serves both the API (`/api/*`) and the frontend app (`/`). The frontend is built during deployment and served as static files by the same server.
+**You deploy ONE service.** The Express backend serves both the API (`/api/*`) and the React frontend (`/`) from a single process.
 
-### AletCloud: 1-click deploy
+### Step 1: Create the service
 
-1. In AletCloud → **Services** → **Create** → **Public Repository**
+1. AletCloud → **Services** → **Create** → **Public Repository**
 2. Repository: `https://github.com/asefaden/cmc-delala`
 3. **Build Pack** = `Paketo` (default)
 
-### Required environment variables
+### Step 2: Set environment variables
 
-| Variable | Value | Why |
+| Variable | Value | Notes |
 |---|---|---|
 | `NODE_ENV` | `production` | Enables production mode |
-| `JWT_SECRET` | `openssl rand -hex 64` | **⚠️ Required.** Generate a strong secret |
-| `FRONTEND_URL` | `*` | CORS — same-origin SPA, so `*` is fine |
+| `JWT_SECRET` | *(generate one)* | ⚠️ **Required.** See below |
+| `FRONTEND_URL` | `*` | CORS — same-origin SPA |
 | `API_BASE_URL` | `*` | Same-origin API |
-| `BP_NODE_RUN_SCRIPTS` | `build` | Tells Paketo to run the frontend build |
+| `BP_NODE_RUN_SCRIPTS` | `build` | Tells Paketo to build the frontend |
 
-### Optional environment variables (database)
+Generate a JWT secret:
+```bash
+openssl rand -hex 64
+```
 
-| Variable | Default | Description |
-|---|---|---|
-| `DB_HOST` | `localhost` | MariaDB/MySQL host |
-| `DB_PORT` | `3306` | Database port |
-| `DB_NAME` | `delala` | Database name |
-| `DB_USER` | `admin_delala` | Database user |
-| `DB_PASSWORD` | *required* | Database password |
+### Step 3: Add a database
 
-### How it works
+1. AletCloud → **Databases** → **MariaDB** → Create
+2. Copy connection details into your service's env vars:
 
-The root `package.json` orchestrates everything during deployment:
+| Variable | Example |
+|---|---|
+| `DB_HOST` | `db-svc.internal.aletcloud.com` |
+| `DB_PORT` | `3306` |
+| `DB_NAME` | `delala` |
+| `DB_USER` | `admin_delala` |
+| `DB_PASSWORD` | `your_password` |
+
+### That's it!
+
+The server starts on port `3000` and AletCloud routes traffic automatically.
+Database tables and seed data are created on first boot.
+
+---
+
+## How the build works
 
 ```
 AletCloud triggers:
@@ -53,24 +66,14 @@ AletCloud triggers:
 │    └─ node backend/server.js│
 │    → Express serves:        │
 │       • /api/* (JSON API)   │
-│       • / (built frontend)  │
+│       • / (React SPA)       │
 │       • /health (uptime)    │
 └─────────────────────────────┘
 ```
 
-The server is listening on `0.0.0.0:3000` — AletCloud will forward traffic automatically.
+---
 
-### Adding a database (MariaDB)
-
-1. In AletCloud, create a new **Database** → **MariaDB**
-2. Copy the connection details into your service's environment variables:
-   - `DB_HOST` = the database service hostname
-   - `DB_PORT` = `3306`
-   - `DB_NAME`, `DB_USER`, `DB_PASSWORD` = whatever you set
-
-## 🐳 Alternative: Docker Compose
-
-For full control with a bundled MariaDB:
+## 🐳 Local development with Docker
 
 ```bash
 git clone https://github.com/asefaden/cmc-delala
@@ -79,42 +82,46 @@ cd cmc-delala/backend
 # Set your JWT_SECRET
 echo "JWT_SECRET=$(openssl rand -hex 64)" >> .env
 
-# Start everything
+# Start everything (app + MariaDB)
 docker compose up -d
 ```
 
-The app will be at `http://localhost:3000`.
+App runs at `http://localhost:3000`.
 
-## 🛠️ Local development
+---
+
+## 🛠️ Local development (manual)
 
 **Prerequisites:** Node 18+, MariaDB/MySQL running locally.
 
 ```bash
-# Copy and edit environment
+# 1. Copy and edit environment
 cp backend/.env.example backend/.env
+# Edit backend/.env with your DB credentials and JWT_SECRET
 
-# Install backend deps
-cd backend && npm install
+# 2. Install & run backend
+cd backend && npm install && npm run dev
 
-# In a new terminal — install & run frontend
+# 3. In a new terminal — install & run frontend
 cd frontend && npm install && npm run dev
-
-# In the first terminal — run backend
-cd backend && npm run dev
 ```
 
 Frontend dev server runs on `:5173` with proxy to `:3000`.
 
+---
+
 ## 📁 Project structure
 
 ```
-├── package.json          ← Root orchestrator (Paketo entry point)
+├── package.json          ← Root orchestrator (AletCloud entry point)
+├── Dockerfile            ← Production Docker build (frontend + backend)
 ├── backend/
 │   ├── server.js         ← Express API + static frontend server
-│   ├── database.js       ← MariaDB/MySQL connection
+│   ├── database.js       ← MariaDB/MySQL connection & schema
 │   ├── routes/           ← API route handlers
 │   └── docker-compose.yml
 ├── frontend/
 │   ├── src/              ← React app (Vite)
+│   ├── vite.config.js
 │   └── package.json
 └── README.md
