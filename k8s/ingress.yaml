@@ -1,0 +1,46 @@
+# ============================================================
+# Ingress for CMC Delala
+# ============================================================
+# This is a SINGLE-PROCESS app: the backend serves both the API
+# and the frontend SPA. ALL traffic routes to the same service.
+#
+# The backend (Express) handles:
+#   /api/*     → API routes (auth, listings, brokers, admin)
+#   /uploads/* → Static uploaded files
+#   /health    → Health check
+#   /config    → Frontend config endpoint
+#   /*         → SPA catch-all (serves React index.html)
+# ============================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cmc-delal-ingress
+  labels:
+    app: cmc-delal-backend
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    # ---- Uncomment for TLS with cert-manager ----
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  # ---- Uncomment to enable TLS ----
+  # tls:
+  #   - hosts:
+  #       - your-domain.com
+  #     secretName: cmc-delal-tls
+  rules:
+    - host: your-domain.com  # ← REPLACE with your actual domain
+      http:
+        paths:
+          # ALL paths → cmc-delal-backend:3000
+          # The backend handles /api/*, /uploads/*, /health, /config,
+          # and the SPA catch-all — no path rewriting needed.
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: cmc-delal-backend
+                port:
+                  number: 3000
