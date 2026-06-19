@@ -18,7 +18,9 @@ app.get('/health', (req, res) => {
 
 // 2. Frontend configuration endpoint
 app.get('/config', (req, res) => {
-  res.json({ apiBaseUrl: process.env.API_BASE_URL || '' });
+  // Treat '*' or empty as same-origin (no prefix needed)
+  const raw = (process.env.API_BASE_URL || '').trim();
+  res.json({ apiBaseUrl: (raw && raw !== '*') ? raw : '' });
 });
 
 // Set up security headers with helmet
@@ -144,11 +146,19 @@ async function startServer() {
 
   // 1. Start listening immediately on all interfaces (0.0.0.0) for Docker compatibility
   const server = app.listen(PORT, '0.0.0.0', () => {
-    console.log(`========================================================`); 
-    console.log(`   ሲኤምሲ ደላላ (CMC Delal) Backend is running!`);
-    console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`   Listening on: http://0.0.0.0:${PORT}`);
-    console.log(`========================================================`);
+    const env = process.env.NODE_ENV || 'development';
+    console.log('');
+    console.log('╔════════════════════════════════════════════════════════════╗');
+    console.log('║          ሲኤምሲ ደላላ (CMC Delal) Backend                  ║');
+    console.log('╠════════════════════════════════════════════════════════════╣');
+    console.log(`║  Status:    ✓ Running                                    ║`);
+    console.log(`║  Env:       ${(env).padEnd(45)}║`);
+    console.log(`║  URL:       ${('http://localhost:' + PORT).padEnd(45)}║`);
+    console.log('╠════════════════════════════════════════════════════════════╣');
+    console.log('║  Routes:   /api/auth, /api/listings, /api/brokers,       ║');
+    console.log('║            /api/admin, /health, /config                  ║');
+    console.log('╚════════════════════════════════════════════════════════════╝');
+    console.log('');
   });
 
   // Handle server errors (e.g., port already in use)
@@ -163,13 +173,12 @@ async function startServer() {
 
   // 2. Initialize database asynchronously.
   try {
-    console.log("Initializing database...");
     await initDb();
-    console.log("Database initialized successfully.");
+    console.log('  ✓ Database: Connected & schema ready');
   } catch (err) {
-    console.warn("WARNING: Database initialization failed:", err.message);
-    console.warn("Server is running WITHOUT database access. Check your DB environment variables.");
-    console.warn("API endpoints requiring database will return 500 errors until DB is available.");
+    console.warn('  ✗ Database: FAILED —', err.message);
+    console.warn('    Server is running WITHOUT database access. Check your DB environment variables.');
+    console.warn('    API endpoints requiring database will return 500 errors until DB is available.');
   }
 }
 

@@ -435,7 +435,9 @@ async function fetchConfig() {
     // Use a direct fetch here since apiRequest depends on the result
     const res = await fetch('/config');
     const config = await res.json();
-    apiBaseUrl = config.apiBaseUrl || '';
+    // Normalize: treat '*' or whitespace-only as same-origin (no prefix)
+    const raw = (config.apiBaseUrl || '').trim();
+    apiBaseUrl = (raw && raw !== '*') ? raw : '';
   } catch (err) {
     console.error("Failed to fetch server configuration. API calls may fail.", err);
   }

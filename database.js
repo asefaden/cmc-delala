@@ -38,7 +38,7 @@ async function initDb() {
   // Verify connection immediately
   try {
     const connection = await pool.getConnection();
-    console.log("Database connection test successful.");
+    // Connection verified
     connection.release();
   } catch (err) {
     throw new Error(`Database connection failed: ${err.message}`);
@@ -126,7 +126,7 @@ async function initDb() {
   // Seed default data if users table is empty
   const userCount = await dbGet("SELECT COUNT(*) as count FROM users");
   if (userCount.count === 0) {
-    console.log("Database empty. Seeding initial records...");
+    console.log("  → Seeding initial data (first run)...");
 
     // Password Hashing
     const adminHash = await bcrypt.hash("AdminPassword123!", 10);
@@ -158,7 +158,6 @@ async function initDb() {
       VALUES (?, ?, ?, ?, 'client', 0, 'Addis Ababa local looking for housing options.', 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150')
     `, ['abenezer@gmail.com', clientHash, 'Abenezer Yosef', '+251922334455']);
 
-    console.log("Seeded default users successfully!");
 
     // 5. Seed Listings for Brokers
     // Real Estate listing for Almaz (Verified Broker)
@@ -204,7 +203,6 @@ async function initDb() {
       JSON.stringify(['https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=800'])
     ]);
 
-    console.log("Seeded default listings successfully!");
 
     // 6. Seed a sample review
     await dbRun(`
@@ -212,7 +210,7 @@ async function initDb() {
       VALUES (?, ?, 5, 'Abeba was extremely professional and helped me secure my apartment in Bole Atlas within 3 days. Highly recommended!')
     `, [b1Result.id, cResult.id]);
 
-    console.log("Seeded sample reviews successfully!");
+    console.log("  → Seeded users, listings, and reviews.");
   }
 }
 
