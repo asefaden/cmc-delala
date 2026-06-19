@@ -70,19 +70,19 @@ app.use(sanitizeBody);
 // Apply global API rate limiter
 app.use('/api/', apiLimiter);
 
-// --- Mount Routes and Static Files ---
-// Defining routes outside the async startup ensures the server is ready 
-// to handle health checks and static files immediately upon binding to the port.
+// --- Mount Routes ---
+// API-only backend — frontend is served separately (Vite React).
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/listings', require('./routes/listings'));
 app.use('/api/brokers', require('./routes/brokers'));
 app.use('/api/admin', require('./routes/admin'));
 
-app.use(express.static(path.join(__dirname, 'public')));
+// Serve uploaded files (avatars, documents)
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-app.get('*', (req, res) => {
-  if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Endpoint not found.' });
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+// API 404 handler
+app.use('/api/*', (req, res) => {
+  res.status(404).json({ error: 'Endpoint not found.' });
 });
 
 // Global Error Handler (4-arg signature tells Express this is an error handler)
@@ -132,7 +132,7 @@ async function startServer() {
   }
 
   // Ensure upload directory exists before routes are initialized
-  const uploadDir = path.join(__dirname, 'public', 'uploads');
+  const uploadDir = path.join(__dirname, 'uploads');
   try {
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });

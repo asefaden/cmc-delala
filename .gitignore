@@ -1,18 +1,39 @@
 # Dependencies
 node_modules/
+.pnp
+.pnp.js
 
-# Environment variables
+# Build output
+dist/
+build/
+
+# Environment files
 .env
+.env.local
+.env.*.local
 
 # Logs
+logs/
 *.log
+npm-debug.log*
 
-# OS-specific
+# OS files
 .DS_Store
 Thumbs.db
 
-# Local database files
-*.db
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
 
-# Local cookies/session files
+# Test
+coverage/
+
+# Uploads (user-generated content)
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# Sensitive/local files
 cookies.txt
+delal.db

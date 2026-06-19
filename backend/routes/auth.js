@@ -16,7 +16,7 @@ const {
 } = require('../security');
 
 // --- Multer Setup for Avatar Uploads ---
-const uploadDir = path.join(__dirname, '..', 'public', 'uploads');
+const uploadDir = path.join(__dirname, '..', 'uploads');
 
 const avatarStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadDir),
@@ -256,7 +256,7 @@ router.post(
     try {
       const user = await dbGet('SELECT avatar FROM users WHERE id = ?', [req.user.id]);
       if (user && user.avatar && user.avatar.startsWith('/uploads/')) {
-        const oldPath = path.join(__dirname, '..', 'public', user.avatar);
+        const oldPath = path.join(__dirname, '..', user.avatar);
         if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
       }
     } catch (_) {}
