@@ -1,11 +1,16 @@
-let apiBaseUrl = '';
+// Initialize from Vite env var (set in frontend/.env or frontend/.env.production)
+let apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').trim();
+if (apiBaseUrl === '*') apiBaseUrl = '';
 
 export async function fetchConfig() {
   try {
     const res = await fetch('/config');
     const config = await res.json();
     const raw = (config.apiBaseUrl || '').trim();
-    apiBaseUrl = (raw && raw !== '*') ? raw : '';
+    // Allow backend /config to override the env var at runtime
+    if (raw && raw !== '*') {
+      apiBaseUrl = raw;
+    }
   } catch (err) {
     console.error("Failed to fetch server configuration.", err);
   }
