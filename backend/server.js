@@ -91,6 +91,15 @@ app.use('/api/*', (req, res) => {
   res.status(404).json({ error: 'Endpoint not found.' });
 });
 
+// SPA fallback — in production, serve index.html for any non-API route
+// so React Router can handle client-side navigation on page refresh.
+if (process.env.NODE_ENV === 'production' && fs.existsSync(frontendDist)) {
+  const spaIndex = path.join(frontendDist, 'index.html');
+  app.get('*', (req, res) => {
+    res.sendFile(spaIndex);
+  });
+}
+
 // Global Error Handler (4-arg signature tells Express this is an error handler)
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
