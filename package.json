@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Secure and Premium Ethiopian Delal (Broker) Platform",
   "scripts": {
-    "build": "cd frontend && npm ci && npm run build",
+    "build": "cd backend && npm ci && cd ../frontend && npm ci && npm run build",
     "install:all": "cd frontend && npm ci && cd ../backend && npm ci",
     "start": "cd backend && npm start",
     "dev": "cd backend && npm run dev"
