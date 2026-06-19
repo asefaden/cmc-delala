@@ -15,7 +15,9 @@ services:
       - "3306:3306"
 
   api:
-    build: .
+    build:
+      context: ..
+      dockerfile: Dockerfile
     restart: unless-stopped
     ports:
       - "3000:3000"
