@@ -1,16 +1,16 @@
 # ሲኤምሲ ደላላ — CMC Delal
 
-**Secure Ethiopian Broker (Delal) Platform** — one-click deploy on AletCloud.
+**Secure Ethiopian Broker (Delal) Platform**
 
-## 🚀 Deploy on AletCloud (single service)
+## 🚀 One service — that's it
 
-This repo is pre-configured for **single-service deployment** — the backend serves both the API and the built frontend. No separate frontend hosting needed.
+**You deploy ONE service.** Not two. The backend Express server serves both the API (`/api/*`) and the frontend app (`/`). The frontend is built during deployment and served as static files by the same server.
 
-### 1-click deploy
+### AletCloud: 1-click deploy
 
-1. In AletCloud, create a new **Service** → **Public Repository**
-2. Enter `https://github.com/asefaden/cmc-delala`
-3. Set the **Build Pack** to `Paketo`
+1. In AletCloud → **Services** → **Create** → **Public Repository**
+2. Repository: `https://github.com/asefaden/cmc-delala`
+3. **Build Pack** = `Paketo` (default)
 
 ### Required environment variables
 
