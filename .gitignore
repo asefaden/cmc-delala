@@ -10,3 +10,9 @@ node_modules/
 # OS-specific
 .DS_Store
 Thumbs.db
+
+# Local database files
+*.db
+
+# Local cookies/session files
+cookies.txt
