@@ -1,0 +1,42 @@
+version: "3.8"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: dockerfile
+    container_name: cmc-delala-backend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      # Ensure NODE_ENV is production inside the container
+      - NODE_ENV=production
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: mariadb:10.11
+    container_name: cmc-delala-db
+    restart: unless-stopped
+    ports:
+      - "33062:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=${DB_PASSWORD:-changeme}
+      - MYSQL_DATABASE=${DB_NAME:-delala}
+      - MYSQL_USER=${DB_USER:-admin_delala}
+      - MYSQL_PASSWORD=${DB_PASSWORD:-changeme}
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  db_data:
