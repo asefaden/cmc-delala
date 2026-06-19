@@ -3,9 +3,6 @@ node_modules/
 .pnp
 .pnp.js
 
-# Build output
-build/
-dist/
 
 # Environment files
 .env
@@ -30,9 +27,6 @@ Thumbs.db
 # Test
 coverage/
 
-# Uploads (user-generated content)
-backend/uploads/*
-!backend/uploads/.gitkeep
 
 # Sensitive/local files
 cookies.txt
