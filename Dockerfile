@@ -15,11 +15,18 @@ COPY frontend/package.json frontend/package-lock.json ./
 # Install frontend dependencies
 RUN npm ci
 
-# Copy frontend source code
+# Copy frontend source code (includes .env files needed for Vite build)
 COPY frontend/ ./
 
-# Build Vite → outputs to ../dist (configured in vite.config.js)
+# Build Vite → outDir: "../dist" resolves to /dist (parent of WORKDIR /app)
 RUN npm run build
+
+# Verify build output exists before proceeding
+RUN echo "--- Verifying frontend build output ---" \
+    && ls -la /dist/ \
+    && test -f /dist/index.html \
+    && echo "--- Frontend build OK ---" \
+    || (echo "ERROR: /dist/index.html not found after Vite build!" && exit 1)
 
 
 # --- Stage 2: Production ---
@@ -40,8 +47,14 @@ RUN npm ci --omit=dev
 COPY backend/ ./
 
 # Copy built frontend from Stage 1
-# Vite outDir: "../dist" in /app → outputs to /dist in the builder stage
 COPY --from=frontend-builder /dist /workspace/dist
+
+# Verify frontend files are in place
+RUN echo "--- Verifying production frontend ---" \
+    && ls -la /workspace/dist/ \
+    && test -f /workspace/dist/index.html \
+    && echo "--- Production frontend OK ---" \
+    || (echo "ERROR: /workspace/dist/index.html not found!" && exit 1)
 
 # Create uploads directory
 RUN mkdir -p /workspace/uploads

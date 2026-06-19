@@ -7,9 +7,10 @@ backend/node_modules/
 dist/
 
 # Environment files (passed at runtime via env vars)
-.env
-.env.*
-!.env.example
+# Only exclude root-level env files; keep frontend/.env* for Vite builds
+/.env
+/.env.*
+!/.env.example
 
 # Git
 .git/
