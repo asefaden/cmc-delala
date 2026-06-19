@@ -12,31 +12,38 @@ services:
     env_file:
       - .env
     environment:
-      # Ensure NODE_ENV is production inside the container
       - NODE_ENV=production
-    depends_on:
-      db:
-        condition: service_healthy
-
-  db:
-    image: mariadb:10.11
-    container_name: cmc-delala-db
-    restart: unless-stopped
-    ports:
-      - "33062:3306"
-    environment:
-      - MYSQL_ROOT_PASSWORD=${DB_PASSWORD:-changeme}
-      - MYSQL_DATABASE=${DB_NAME:-delala}
-      - MYSQL_USER=${DB_USER:-admin_delala}
-      - MYSQL_PASSWORD=${DB_PASSWORD:-changeme}
-    volumes:
-      - db_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
-volumes:
-  db_data:
+# NOTE: The external database (db.aletcloud.com) is configured via .env variables.
+# The local MariaDB service has been removed since it is not used.
+# If you need a local database, uncomment the db service below and update .env
+# to use DB_HOST=db and DB_PORT=3306.
+#
+#   db:
+#     image: mariadb:10.11
+#     container_name: cmc-delala-db
+#     restart: unless-stopped
+#     ports:
+#       - "33062:3306"
+#     environment:
+#       - MYSQL_ROOT_PASSWORD=${DB_PASSWORD:-changeme}
+#       - MYSQL_DATABASE=${DB_NAME:-delala}
+#       - MYSQL_USER=${DB_USER:-admin_delala}
+#       - MYSQL_PASSWORD=${DB_PASSWORD:-changeme}
+#     volumes:
+#       - db_data:/var/lib/mysql
+#     healthcheck:
+#       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+#       interval: 10s
+#       timeout: 5s
+#       retries: 5
+#       start_period: 30s
+#
+# volumes:
+#   db_data:

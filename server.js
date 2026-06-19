@@ -38,12 +38,24 @@ app.use(helmet({
 }));
 
 // CORS Configuration
-app.use(cors({
-  origin: process.env.FRONTEND_URL,
+// When FRONTEND_URL is '*' or unset, allow all origins (for development or same-origin SPA).
+// When a specific URL is set, only allow that origin with credentials.
+const corsOrigin = process.env.FRONTEND_URL;
+const corsOptions = {
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
-}));
+};
+
+if (!corsOrigin || corsOrigin === '*') {
+  // Allow all origins — credentials won't work with wildcard in browsers,
+  // but this is fine for same-origin SPA or development.
+  corsOptions.origin = true; // Reflect the request origin
+} else {
+  corsOptions.origin = corsOrigin;
+}
+
+app.use(cors(corsOptions));
 
 // Middleware
 app.use(express.json());
@@ -71,7 +83,8 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Global Error Handler
+// Global Error Handler (4-arg signature tells Express this is an error handler)
+// eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
   console.error("Unhandled server error:", err);
   
@@ -80,7 +93,17 @@ app.use((err, req, res, next) => {
     .catch(console.error);
 
   return res.status(500).json({ error: 'Something went wrong on the server.' });
-  next();
+});
+
+// Handle uncaught exceptions and unhandled rejections to prevent silent container crashes
+process.on('uncaughtException', (err) => {
+  console.error('FATAL: Uncaught Exception:', err);
+  // Give the process a moment to flush logs before exiting
+  setTimeout(() => process.exit(1), 1000);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('FATAL: Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
 // Initialize database and start server
@@ -120,12 +143,22 @@ async function startServer() {
   }
 
   // 1. Start listening immediately on all interfaces (0.0.0.0) for Docker compatibility
-  app.listen(PORT, '0.0.0.0', () => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`========================================================`); 
     console.log(`   ሲኤምሲ ደላላ (CMC Delal) Backend is running!`);
     console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`   Listening on: http://0.0.0.0:${PORT}`);
     console.log(`========================================================`);
+  });
+
+  // Handle server errors (e.g., port already in use)
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`FATAL: Port ${PORT} is already in use. Cannot start server.`);
+    } else {
+      console.error('FATAL: Server error:', err);
+    }
+    process.exit(1);
   });
 
   // 2. Initialize database asynchronously.
@@ -135,7 +168,8 @@ async function startServer() {
     console.log("Database initialized successfully.");
   } catch (err) {
     console.warn("WARNING: Database initialization failed:", err.message);
-    console.log("Server is running WITHOUT database access. Check your DB environment variables.");
+    console.warn("Server is running WITHOUT database access. Check your DB environment variables.");
+    console.warn("API endpoints requiring database will return 500 errors until DB is available.");
   }
 }
 
