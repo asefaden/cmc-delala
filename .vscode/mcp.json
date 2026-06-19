@@ -1,8 +1,0 @@
-{
-  "$schema": "https://raw.githubusercontent.com/modelcontextprotocol/specification/main/schema/config.json",
-  "mcpServers": {
-    "aletcloud": {
-      "url": "https://mcp.aletcloud.com/mcp"
-    }
-  }
-}
