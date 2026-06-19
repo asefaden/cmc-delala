@@ -87,7 +87,22 @@ app.use((err, req, res, next) => {
 async function startServer() {
   // Security check: Ensure JWT_SECRET is set in production
   if (process.env.NODE_ENV === 'production' && (!process.env.JWT_SECRET || process.env.JWT_SECRET.includes('development'))) {
-    console.error('FATAL ERROR: JWT_SECRET is not defined or is set to a default development value in the production environment.');
+    console.error('');
+    console.error('╔══════════════════════════════════════════════════════════════╗');
+    console.error('║                    FATAL CONFIGURATION ERROR                ║');
+    console.error('╠══════════════════════════════════════════════════════════════╣');
+    console.error('║  JWT_SECRET is not defined or is set to a default value.   ║');
+    console.error('║                                                            ║');
+    console.error('║  In production, you MUST set a strong, unique JWT_SECRET   ║');
+    console.error('║  as an environment variable in your hosting platform.      ║');
+    console.error('║                                                            ║');
+    console.error('║  Example (Coolify/Docker):                                 ║');
+    console.error('║    JWT_SECRET=<your-random-secret-here>                    ║');
+    console.error('║                                                            ║');
+    console.error('║  Generate one with: node -e "console.log(require(\'crypto\')  ║');
+    console.error('║    .randomBytes(64).toString(\'hex\'))"                       ║');
+    console.error('╚══════════════════════════════════════════════════════════════╝');
+    console.error('');
     process.exit(1);
   }
 
