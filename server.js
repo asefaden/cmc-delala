@@ -119,12 +119,12 @@ async function startServer() {
     console.log("Proceeding assuming directory is handled by Git tracking.");
   }
 
-  // 1. Start listening immediately. 
-  app.listen(PORT, () => {
+  // 1. Start listening immediately on all interfaces (0.0.0.0) for Docker compatibility
+  app.listen(PORT, '0.0.0.0', () => {
     console.log(`========================================================`); 
     console.log(`   ሲኤምሲ ደላላ (CMC Delal) Backend is running!`);
     console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`   Port: ${PORT}`);
+    console.log(`   Listening on: http://0.0.0.0:${PORT}`);
     console.log(`========================================================`);
   });
 
