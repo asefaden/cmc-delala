@@ -2,126 +2,138 @@
 
 **Secure Ethiopian Broker (Delal) Platform**
 
-## 🚀 Deploy on AletCloud (2 minutes)
+## 🚀 Deploy
 
-**You deploy ONE service.** The Express backend serves both the API (`/api/*`) and the React frontend (`/`) from a single process.
+Frontend and backend are **independently deployable services** that communicate via REST API.
 
-### Step 1: Create the service
+---
 
-1. AletCloud → **Services** → **Create** → **Public Repository**
-2. Repository: `https://github.com/asefaden/cmc-delala`
-3. **Build Pack** = `Paketo` (default)
+## 📁 Project Structure
 
-### Step 2: Set environment variables
+```
+├── backend/               ← Node.js/Express API server
+│   ├── server.js          ← Express API server
+│   ├── database.js        ← MariaDB/MySQL connection & schema
+│   ├── routes/            ← API route handlers
+│   ├── .env               ← Backend environment variables
+│   └── .env.example       ← Environment variable template
+├── frontend/              ← React SPA (Vite)
+│   ├── src/               ← React app source
+│   ├── vite.config.js     ← Vite config with dev proxy
+│   ├── .env               ← Development environment
+│   ├── .env.production    ← Production environment (API URL)
+│   ├── .env.example       ← Environment variable template
+│   └── package.json
+└── README.md
+```
+
+---
+
+## 🖥️ Local Development
+
+**Prerequisites:** Node 18+, MariaDB/MySQL running locally.
+
+### Backend
+
+```bash
+cd backend
+cp .env.example .env    # Edit with your DB credentials and JWT_SECRET
+npm install
+npm run dev              # Starts on :3000
+```
+
+### Frontend (new terminal)
+
+```bash
+cd frontend
+cp .env.example .env    # Leave VITE_API_BASE_URL empty for dev proxy
+npm install
+npm run dev              # Starts on :5173, proxies /api to :3000
+```
+
+The Vite dev server proxies `/api`, `/uploads`, `/health`, and `/config` to `localhost:3000`.
+
+---
+
+## 🌐 Production Deployment
+
+Frontend and backend are deployed **separately** as independent services.
+
+### Backend (API Server)
+
+1. Clone and configure:
+
+```bash
+git clone https://github.com/asefaden/cmc-delala.git
+cd cmc-delala/backend
+cp .env.example .env
+```
+
+2. Set environment variables:
 
 | Variable | Value | Notes |
 |---|---|---|
 | `NODE_ENV` | `production` | Enables production mode |
+| `PORT` | `3000` | Server port |
 | `JWT_SECRET` | *(generate one)* | ⚠️ **Required.** See below |
-| `FRONTEND_URL` | `*` | CORS — same-origin SPA |
-| `API_BASE_URL` | `*` | Same-origin API |
-| `BP_NODE_RUN_SCRIPTS` | `build` | Tells Paketo to build the frontend |
+| `FRONTEND_URL` | `https://your-frontend.com` | CORS — your frontend domain |
+| `API_BASE_URL` | `https://api.yourdomain.com` | Backend public URL |
+| `DB_HOST` | `your-db-host` | MySQL/MariaDB host |
+| `DB_PORT` | `3306` | MySQL/MariaDB port |
+| `DB_NAME` | `delala` | Database name |
+| `DB_USER` | `your-db-user` | Database user |
+| `DB_PASSWORD` | `your-db-password` | Database password |
 
 Generate a JWT secret:
 ```bash
 openssl rand -hex 64
 ```
 
-### Step 3: Add a database
+3. Install and start:
 
-1. AletCloud → **Databases** → **MariaDB** → Create
-2. Copy connection details into your service's env vars:
+```bash
+npm install
+npm start
+```
 
-| Variable | Example |
-|---|---|
-| `DB_HOST` | `db-svc.internal.aletcloud.com` |
-| `DB_PORT` | `3306` |
-| `DB_NAME` | `delala` |
-| `DB_USER` | `admin_delala` |
-| `DB_PASSWORD` | `your_password` |
-
-### That's it!
-
-The server starts on port `3000` and AletCloud routes traffic automatically.
 Database tables and seed data are created on first boot.
 
----
+### Frontend (Static SPA)
 
-## How the build works
-
-```
-AletCloud triggers:
-┌─────────────────────────────┐
-│ 1. npm install              │
-│    └─ postinstall:          │
-│       cd backend && npm ci  │
-├─────────────────────────────┤
-│ 2. npm run build            │
-│    └─ cd frontend           │
-│       && npm ci             │
-│       && npm run build      │
-│    → outputs frontend/dist/ │
-├─────────────────────────────┤
-│ 3. npm start                │
-│    └─ node backend/server.js│
-│    → Express serves:        │
-│       • /api/* (JSON API)   │
-│       • / (React SPA)       │
-│       • /health (uptime)    │
-└─────────────────────────────┘
-```
-
----
-
-## 🐳 Local development with Docker
+1. Configure:
 
 ```bash
-git clone https://github.com/asefaden/cmc-delala
-cd cmc-delala/backend
-
-# Set your JWT_SECRET
-echo "JWT_SECRET=$(openssl rand -hex 64)" >> .env
-
-# Start everything (app + MariaDB)
-docker compose up -d
+cd frontend
+cp .env.production .env.production
 ```
 
-App runs at `http://localhost:3000`.
+Edit `.env.production`:
+```
+VITE_API_BASE_URL=https://api.yourdomain.com
+```
 
----
-
-## 🛠️ Local development (manual)
-
-**Prerequisites:** Node 18+, MariaDB/MySQL running locally.
+2. Build:
 
 ```bash
-# 1. Copy and edit environment
-cp backend/.env.example backend/.env
-# Edit backend/.env with your DB credentials and JWT_SECRET
-
-# 2. Install & run backend
-cd backend && npm install && npm run dev
-
-# 3. In a new terminal — install & run frontend
-cd frontend && npm install && npm run dev
+npm install
+npm run build
 ```
 
-Frontend dev server runs on `:5173` with proxy to `:3000`.
+3. Deploy the `dist/` folder to any static host:
+   - **Netlify**, **Vercel**, **Cloudflare Pages**, **GitHub Pages**, **AWS S3**, etc.
 
 ---
 
-## 📁 Project structure
+## 🔒 Production Checklist
 
-```
-├── package.json          ← Root orchestrator (AletCloud entry point)
-├── Dockerfile            ← Production Docker build (frontend + backend)
-├── backend/
-│   ├── server.js         ← Express API + static frontend server
-│   ├── database.js       ← MariaDB/MySQL connection & schema
-│   ├── routes/           ← API route handlers
-│   └── docker-compose.yml
-├── frontend/
-│   ├── src/              ← React app (Vite)
-│   ├── vite.config.js
-│   └── package.json
-└── README.md
+### Backend
+- [ ] Set `NODE_ENV=production`
+- [ ] Set a strong `JWT_SECRET`
+- [ ] Configure database connection (`DB_HOST`, `DB_PORT`, etc.)
+- [ ] Set `FRONTEND_URL` to your frontend domain (for CORS)
+- [ ] Set `API_BASE_URL` to your backend public URL
+
+### Frontend
+- [ ] Set `VITE_API_BASE_URL` in `.env.production` to your backend URL
+- [ ] Run `npm run build` to build the production bundle
+- [ ] Deploy `dist/` to your static hosting provider

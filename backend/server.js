@@ -70,13 +70,6 @@ app.use(sanitizeBody);
 // Apply global API rate limiter
 app.use('/api/', apiLimiter);
 
-// --- Serve Built Frontend (production) ---
-// If a built frontend dist exists, serve it as static files.
-const frontendDist = path.join(__dirname, '..', 'frontend', 'dist');
-if (process.env.NODE_ENV === 'production' && fs.existsSync(frontendDist)) {
-  app.use(express.static(frontendDist));
-}
-
 // --- Mount Routes ---
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/listings', require('./routes/listings'));
@@ -91,14 +84,6 @@ app.use('/api/*', (req, res) => {
   res.status(404).json({ error: 'Endpoint not found.' });
 });
 
-// SPA fallback — in production, serve index.html for any non-API route
-// so React Router can handle client-side navigation on page refresh.
-if (process.env.NODE_ENV === 'production' && fs.existsSync(frontendDist)) {
-  const spaIndex = path.join(frontendDist, 'index.html');
-  app.get('*', (req, res) => {
-    res.sendFile(spaIndex);
-  });
-}
 
 // Global Error Handler (4-arg signature tells Express this is an error handler)
 // eslint-disable-next-line no-unused-vars
