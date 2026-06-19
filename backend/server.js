@@ -70,8 +70,14 @@ app.use(sanitizeBody);
 // Apply global API rate limiter
 app.use('/api/', apiLimiter);
 
+// --- Serve Built Frontend (production) ---
+// If a built frontend dist exists, serve it as static files.
+const frontendDist = path.join(__dirname, '..', 'frontend', 'dist');
+if (process.env.NODE_ENV === 'production' && fs.existsSync(frontendDist)) {
+  app.use(express.static(frontendDist));
+}
+
 // --- Mount Routes ---
-// API-only backend — frontend is served separately (Vite React).
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/listings', require('./routes/listings'));
 app.use('/api/brokers', require('./routes/brokers'));

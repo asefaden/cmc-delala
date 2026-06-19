@@ -1,0 +1,14 @@
+{
+  "name": "cmc-delal",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CMC Delal - Secure Ethiopian Broker Platform",
+  "scripts": {
+    "build": "cd frontend && npm ci && npm run build",
+    "start": "node backend/server.js",
+    "postinstall": "cd backend && npm ci --production"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
