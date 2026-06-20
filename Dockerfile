@@ -62,9 +62,9 @@ RUN mkdir -p /workspace/uploads
 # Expose the application port
 EXPOSE 3000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
+# Health check – use $PORT so it matches the actual listener
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT:-3000}/health || exit 1
 
-# Start the server
-CMD ["node", "server.js"]
+# Start the server (limit old-space to 384 MB so we stay within Railway's 512 MB cap)
+CMD ["node", "--max-old-space-size=384", "server.js"]

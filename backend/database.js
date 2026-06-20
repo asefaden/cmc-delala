@@ -233,10 +233,16 @@ async function resetDb() {
   await initDb();
 }
 
+/**
+ * Returns the current connection pool (used by graceful shutdown)
+ */
+const getPool = () => pool;
+
 module.exports = {
-  dbRun,
+dbRun,
   dbGet,
   dbAll,
   initDb,
-  resetDb
+  resetDb,
+  getPool
 };
