@@ -25,9 +25,13 @@ const PORT = process.env.PORT || 3000;
 
 // Variables tracking operational health
 let isDbConnected = false;
+let isStarting = true;
 
 // 1. Health check endpoint - updated to reflect true database connectivity state
 app.get('/health', (req, res) => {
+  if (isStarting) {
+    return res.status(200).json({ status: 'starting', timestamp: new Date().toISOString() });
+  }
   if (!isDbConnected) {
     return res.status(503).json({ status: 'unhealthy', database: 'disconnected', timestamp: new Date().toISOString() });
   }
@@ -164,6 +168,7 @@ async function startServer() {
 
   // 3. Start listening
   const server = app.listen(PORT, '0.0.0.0', () => {
+    isStarting = false;
     const env = process.env.NODE_ENV || 'development';
     console.log('\n╔════════════════════════════════════════════════════════════╗');
     console.log('║          ሲኤምሲ ደላላ (CMC Delal) Backend                  ║');
