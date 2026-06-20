@@ -45,12 +45,24 @@ async function initDb() {
     port: parseInt(process.env.DB_PORT, 10) || 3306,
     waitForConnections: true,
     connectionLimit: 10,
-    queueLimit: 0
+    queueLimit: 0,
+    connectTimeout: 10000,   // 10 s to establish TCP connection
+    acquireTimeout: 10000,   // 10 s to grab a pool slot
+    enableKeepAlive: true,
+    keepAliveInitialDelay: 10000
+  });
+
+  // Surface pool-level errors so they don't go unnoticed
+  pool.pool.on('connection', (conn) => {
+    conn.on('error', (err) => {
+      console.error('  ⚠ MySQL connection error:', err.code || err.message);
+    });
   });
 
   // Verify connection immediately
   try {
     const connection = await pool.getConnection();
+    console.log('  ✓ MySQL connection verified');
     connection.release();
   } catch (err) {
     throw new Error(`Database connection failed: ${err.message}`);
