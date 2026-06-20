@@ -47,7 +47,6 @@ async function initDb() {
     connectionLimit: 10,
     queueLimit: 0,
     connectTimeout: 10000,   // 10 s to establish TCP connection
-    acquireTimeout: 10000,   // 10 s to grab a pool slot
     enableKeepAlive: true,
     keepAliveInitialDelay: 10000
   });

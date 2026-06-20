@@ -4,9 +4,21 @@
   "version": "1.0.0",
   "description": "Secure and Premium Ethiopian Delal (Broker) Platform",
   "scripts": {
-    "build": "cd backend && npm ci && cd ../frontend && npm ci && npm run build",
+    "build": "cd frontend && npm ci && npm run build",
     "install:all": "cd frontend && npm ci && cd ../backend && npm ci",
-    "start": "cd backend && npm start",
+    "start": "node backend/server.js",
     "dev": "cd backend && npm run dev"
+  },
+  "dependencies": {
+    "bcryptjs": "2.4.3",
+    "cookie-parser": "1.4.7",
+    "cors": "2.8.6",
+    "dotenv": "17.4.2",
+    "express": "4.22.2",
+    "express-rate-limit": "7.5.1",
+    "helmet": "7.2.0",
+    "jsonwebtoken": "9.0.3",
+    "multer": "1.4.5-lts.1",
+    "mysql2": "3.22.5"
   }
 }
