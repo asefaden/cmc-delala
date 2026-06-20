@@ -29,7 +29,7 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 
 // Variables tracking operational health
 let isDbConnected = false;
