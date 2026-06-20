@@ -3,11 +3,16 @@
   "private": true,
   "version": "1.0.0",
   "description": "Secure and Premium Ethiopian Delal (Broker) Platform",
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
   "scripts": {
     "build": "cd frontend && npm ci && npm run build",
     "install:all": "cd frontend && npm ci && cd ../backend && npm ci",
     "start": "node backend/server.js",
-    "dev": "cd backend && npm run dev"
+    "dev": "cd backend && npm run dev",
+    "postinstall": "cd frontend && npm ci"
   },
   "dependencies": {
     "bcryptjs": "2.4.3",
