@@ -12,8 +12,15 @@ const { apiLimiter, logSecurityEvent, sanitizeBody } = require('./security');
 // STRICT CHECK: Fail loudly and immediately if JWT_SECRET is missing or insecure in production
 if (process.env.NODE_ENV === 'production') {
   if (!process.env.JWT_SECRET || process.env.JWT_SECRET.includes('development')) {
-    console.error('FATAL ERROR: JWT_SECRET is not configured or uses a development default in production!');
-    console.error('Application startup aborted to prevent unpredictable token verification behavior.');
+    console.error('╔════════════════════════════════════════════════════════════╗');
+    console.error('║  STARTUP DIAGNOSTICS                                     ║');
+    console.error('╠════════════════════════════════════════════════════════════╣');
+    console.error('║  FATAL: JWT_SECRET is missing or uses a development      ║');
+    console.error('║  default. Set a secure JWT_SECRET in your platform       ║');
+    console.error('║  environment variables.                                  ║');
+    console.error('╚════════════════════════════════════════════════════════════╝');
+    console.error('Required env vars: JWT_SECRET, DB_HOST, DB_USER, DB_PASSWORD, DB_NAME');
+    console.error('Set these in your alecloud deployment dashboard.');
     process.exit(1);
   }
 } else {
@@ -107,7 +114,9 @@ app.use('/api/*', (req, res) => {
 });
 
 // --- Serve Frontend (React SPA) ---
-const frontendDist = path.join(__dirname, '..', 'dist');
+const frontendDist = fs.existsSync(path.join(__dirname, 'dist'))
+  ? path.join(__dirname, 'dist')       // Docker: /workspace/dist
+  : path.join(__dirname, '..', 'dist'); // Local: project-root/dist
 if (fs.existsSync(frontendDist)) {
   app.use(express.static(frontendDist));
   app.get('*', (req, res) => {
@@ -140,6 +149,35 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('FATAL: Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
+// Graceful shutdown on SIGTERM / SIGINT (sent by Railway / Docker / process managers)
+const { getPool } = require('./database');
+let _server = null; // will be set after app.listen
+
+function gracefulShutdown(signal) {
+  console.log(`\n⚠  ${signal} received – shutting down gracefully…`);
+  if (_server) {
+    _server.close(() => {
+      console.log('  ✓ HTTP server closed');
+      const pool = getPool();
+      if (pool) {
+        pool.end().then(() => {
+          console.log('  ✓ Database pool closed');
+          process.exit(0);
+        }).catch(() => process.exit(0));
+      } else {
+        process.exit(0);
+      }
+    });
+  }
+  // Force-kill after 8 s so the platform doesn't SIGKILL us
+  setTimeout(() => {
+    console.error('  ✗ Forced shutdown after timeout');
+    process.exit(1);
+  }, 8000).unref();
+}
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT',  () => gracefulShutdown('SIGINT'));
+
 // Bootstrap Server Setup
 async function startServer() {
   // 1. Enforce upload directory existence
@@ -153,7 +191,20 @@ async function startServer() {
     console.warn("WARNING: Could not create upload directory via code:", err.message);
   }
 
-  // 2. Initialize database dependencies BEFORE opening the HTTP port to traffic
+  // 2. Log environment variable status (without exposing secrets)
+  console.log('\n--- Environment Check ---');
+  console.log(`  NODE_ENV:      ${process.env.NODE_ENV || '(not set — defaults to development)'}`);
+  console.log(`  PORT:          ${PORT}`);
+  console.log(`  JWT_SECRET:    ${process.env.JWT_SECRET ? '✓ set' : '✗ MISSING'}`);
+  console.log(`  DB_HOST:       ${process.env.DB_HOST || '✗ MISSING'}`);
+  console.log(`  DB_PORT:       ${process.env.DB_PORT || '3306 (default)'}`);
+  console.log(`  DB_NAME:       ${process.env.DB_NAME || '✗ MISSING'}`);
+  console.log(`  DB_USER:       ${process.env.DB_USER || '✗ MISSING'}`);
+  console.log(`  DB_PASSWORD:   ${process.env.DB_PASSWORD ? '✓ set' : '✗ MISSING'}`);
+  console.log(`  FRONTEND_URL:  ${process.env.FRONTEND_URL || '(not set)'}`);
+  console.log('--- End Environment Check ---\n');
+
+  // 3. Initialize database dependencies BEFORE opening the HTTP port to traffic
   try {
     await initDb();
     isDbConnected = true;
@@ -161,14 +212,21 @@ async function startServer() {
   } catch (err) {
     console.error('  ✗ Database: FAILED —', err.message);
     if (process.env.NODE_ENV === 'production') {
-      console.error('FATAL: Cannot start production server without database connection.');
+      console.error('');
+      console.error('╔════════════════════════════════════════════════════════════╗');
+      console.error('║  DATABASE CONNECTION FAILED IN PRODUCTION                 ║');
+      console.error('╠════════════════════════════════════════════════════════════╣');
+      console.error('║  Check that these environment variables are set:         ║');
+      console.error('║    DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD       ║');
+      console.error('║  Set them in your alecloud deployment dashboard.         ║');
+      console.error('╚════════════════════════════════════════════════════════════╝');
       process.exit(1);
     }
     console.warn('  Running in development fallback mode without DB...');
   }
 
   // 3. Start listening
-  const server = app.listen(PORT, '0.0.0.0', () => {
+  _server = app.listen(PORT, '0.0.0.0', () => {
     isStarting = false;
     const env = process.env.NODE_ENV || 'development';
     console.log('\n╔════════════════════════════════════════════════════════════╗');
@@ -180,7 +238,7 @@ async function startServer() {
     console.log('╚════════════════════════════════════════════════════════════╝\n');
   });
 
-  server.on('error', (err) => {
+  _server.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
       console.error(`FATAL: Port ${PORT} is already in use.`);
     } else {
