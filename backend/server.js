@@ -1,4 +1,5 @@
-require('dotenv').config();
+// dotenv v17+ (@dotenvx/dotenvx) auto-injects .env on import — no .config() call needed
+require('dotenv');
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const cors = require('cors');
