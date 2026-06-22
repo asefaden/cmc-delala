@@ -7,7 +7,8 @@ const fs = require('fs');
 const { dbGet, dbRun } = require('../database');
 const { 
   generateToken, 
-  authenticate, 
+  authenticate,
+  softAuthenticate, 
   sanitizeBody, 
   validateEmail, 
   validateAndNormalizePhone, 
@@ -179,12 +180,15 @@ router.post('/logout', (req, res) => {
   return res.json({ success: true, message: 'Logged out successfully.' });
 });
 
-// 4. Get Current Profile
-router.get('/profile', authenticate, async (req, res) => {
+// 4. Get Current Profile (soft-auth: returns null user instead of 401 when not logged in)
+router.get('/profile', softAuthenticate, async (req, res) => {
+  if (!req.user) {
+    return res.json({ user: null });
+  }
   try {
     const user = await dbGet("SELECT id, email, full_name, phone, role, verified, telegram_username, bio, avatar, created_at FROM users WHERE id = ?", [req.user.id]);
     if (!user) {
-      return res.status(404).json({ error: 'User profile not found.' });
+      return res.json({ user: null });
     }
     return res.json(user);
   } catch (err) {

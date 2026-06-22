@@ -19,7 +19,8 @@ export function AuthProvider({ children }) {
   async function checkSession() {
     try {
       const data = await apiRequest('/api/auth/profile', { suppressLog: true })
-      setUser(data)
+      // Backend may return { user: null } or the user object directly
+      setUser(data.user !== undefined ? data.user : data)
     } catch {
       setUser(null)
     }

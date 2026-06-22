@@ -64,6 +64,10 @@ async function initDb() {
     console.log('  ✓ MySQL connection verified');
     connection.release();
   } catch (err) {
+    console.error('  ✗ MySQL connection verification failed:', err.code || err.message);
+    console.error('  → Database host:', process.env.DB_HOST);
+    console.error('  → Database user:', process.env.DB_USER);
+    console.error('  → Database name:', process.env.DB_NAME);
     throw new Error(`Database connection failed: ${err.message}`);
   }
 
@@ -85,7 +89,7 @@ async function initDb() {
     ) ENGINE=InnoDB
   `);
 
-  // 2. Listings Table (Optimized with JSON Column)
+  // 2. Listings Table (using TEXT for images to ensure compatibility)
   await dbRun(`
     CREATE TABLE IF NOT EXISTS listings (
       id INT AUTO_INCREMENT PRIMARY KEY,
@@ -97,7 +101,7 @@ async function initDb() {
       price DOUBLE NOT NULL,
       currency VARCHAR(10) DEFAULT 'ETB',
       location VARCHAR(255) NOT NULL,
-      images JSON NULL,
+      images TEXT NULL,
       status VARCHAR(20) DEFAULT 'active',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (broker_id) REFERENCES users(id) ON DELETE CASCADE

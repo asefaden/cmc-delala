@@ -56,6 +56,31 @@ function authenticate(req, res, next) {
   }
 }
 
+// 3b. Soft Authenticate - attempts auth but doesn't fail with 401 if no token
+//     Sets req.user to decoded token or null. Used for optional-auth endpoints.
+function softAuthenticate(req, res, next) {
+  let token = req.cookies.token;
+
+  if (!token && req.headers.authorization) {
+    const parts = req.headers.authorization.split(' ');
+    if (parts.length === 2 && parts[0] === 'Bearer') {
+      token = parts[1];
+    }
+  }
+
+  if (!token) {
+    req.user = null;
+    return next();
+  }
+
+  try {
+    req.user = jwt.verify(token, JWT_SECRET || 'cmc-delal-super-secret-key-development-2026');
+  } catch (err) {
+    req.user = null;
+  }
+  next();
+}
+
 // 4. Role Authorization Middleware
 function authorizeRoles(...roles) {
   return (req, res, next) => {
@@ -169,6 +194,7 @@ module.exports = {
   logSecurityEvent,
   generateToken,
   authenticate,
+  softAuthenticate,
   authorizeRoles,
   sanitizeText,
   sanitizeBody,

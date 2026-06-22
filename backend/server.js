@@ -1,5 +1,5 @@
-// dotenv v17+ (@dotenvx/dotenvx) auto-injects .env on import — no .config() call needed
-require('dotenv');
+// Load environment variables from .env file
+require('dotenv').config();
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const cors = require('cors');
@@ -29,7 +29,7 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 const app = express();
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT 
 
 // Variables tracking operational health
 let isDbConnected = false;
@@ -66,37 +66,62 @@ app.get('/config', (req, res) => {
 });
 
 // Security headers via Helmet
+// Security headers via Helmet
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
-      defaultSrc: ["'self'"],
+      defaultSrc: ["...","'self'"],
       scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
       imgSrc: ["'self'", "data:", "blob:", "https://images.unsplash.com", "https://*.unsplash.com"],
-      connectSrc: ["'self'", "https://cdn.jsdelivr.net"]
+      // UPDATE THIS LINE: Add localhost:5173 and your cloud app domain
+      connectSrc: [
+        "'self'", 
+        "http://localhost:5173", 
+        "http://localhost:3000",
+        "https://aletcloud.com", 
+        "https://cdn.jsdelivr.net"
+      ]
     }
   },
   crossOriginEmbedderPolicy: false,
   crossOriginResourcePolicy: false
 }));
 
+
 // CORS Configuration
-const corsOrigin = process.env.FRONTEND_URL;
+// Supports multiple comma-separated origins in FRONTEND_URL
+const corsRaw = (process.env.FRONTEND_URL || '').trim();
+const corsOrigins = corsRaw
+  ? corsRaw.split(',').map(o => o.trim()).filter(Boolean)
+  : [];
+
 const corsOptions = {
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
 };
 
-if (!corsOrigin || corsOrigin === '*') {
+if (corsOrigins.length === 0 || corsOrigins.includes('*')) {
   if (process.env.NODE_ENV === 'production') {
     console.warn('⚠️ WARNING: Allowing all origins in production without credentials.');
   }
   corsOptions.origin = '*';
-  corsOptions.credentials = false; // Cannot use credentials with a literal wildcard '*' securely or legally in modern browsers
+  corsOptions.credentials = false;
+} else if (corsOrigins.length === 1) {
+  corsOptions.origin = corsOrigins[0];
 } else {
-  corsOptions.origin = corsOrigin;
-  corsOptions.credentials = true;
+  // Dynamic origin check for multiple allowed origins
+  corsOptions.origin = (origin, callback) => {
+    // Allow requests with no origin (e.g. server-to-server, curl)
+    if (!origin) return callback(null, true);
+    if (corsOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`Origin ${origin} not allowed by CORS`));
+    }
+  };
 }
 
 app.use(cors(corsOptions));
