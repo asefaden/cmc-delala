@@ -6,10 +6,8 @@ const cors = require('cors');
 const helmet = require('helmet');
 const path = require('path');
 const fs = require('fs');
-const { initDb } = require('./database');
-const { apiLimiter, logSecurityEvent, sanitizeBody } = require('./security');
 
-// STRICT CHECK: Fail loudly and immediately if JWT_SECRET is missing or insecure in production
+// STRICT CHECK: Must run BEFORE require('./security') which validates JWT_SECRET on load
 if (process.env.NODE_ENV === 'production') {
   if (!process.env.JWT_SECRET || process.env.JWT_SECRET.includes('development')) {
     console.error('╔════════════════════════════════════════════════════════════╗');
@@ -24,9 +22,12 @@ if (process.env.NODE_ENV === 'production') {
     process.exit(1);
   }
 } else {
-  // Safe fallback fallback ONLY for local development
+  // Safe fallback ONLY for local development
   process.env.JWT_SECRET = process.env.JWT_SECRET || 'dev_fallback_secret_only_for_local';
 }
+
+const { initDb } = require('./database');
+const { apiLimiter, logSecurityEvent, sanitizeBody } = require('./security');
 
 const app = express();
 const PORT = process.env.PORT 
