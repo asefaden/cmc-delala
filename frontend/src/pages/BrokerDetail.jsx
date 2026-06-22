@@ -152,7 +152,7 @@ export default function BrokerDetail({ lang }) {
 
         <div>
           <h3 style={{ marginBottom: '1rem' }}>{lang === 'en' ? 'Broker Listings' : 'የደላላው ፖስቶች'} ({data.listings.length})</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <div className="listings-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
             {data.listings.length === 0 ? (
               <p className="text-center text-muted" style={{ gridColumn: '1/-1', padding: '2rem' }}>
                 {lang === 'en' ? 'No active listings.' : 'የለጠፈው ዝርዝር የለም።'}

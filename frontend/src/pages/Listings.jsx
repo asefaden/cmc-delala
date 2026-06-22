@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { SlidersHorizontal, Inbox } from 'lucide-react'
+import { SlidersHorizontal, Inbox, ChevronDown, ChevronUp } from 'lucide-react'
 import { apiRequest } from '../api'
 import ListingCard from '../components/ListingCard'
 import i18n from '../i18n'
@@ -9,6 +9,7 @@ export default function Listings({ lang }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const [listings, setListings] = useState([])
   const [loading, setLoading] = useState(true)
+  const [filtersExpanded, setFiltersExpanded] = useState(false)
   const [filters, setFilters] = useState({
     category: searchParams.get('category') || '',
     type: searchParams.get('type') || '',
@@ -59,11 +60,20 @@ export default function Listings({ lang }) {
       </div>
 
       <div className="marketplace-layout">
-        <aside className="filter-sidebar glass-card">
+        <aside className={`filter-sidebar glass-card ${filtersExpanded ? '' : 'collapsed'}`}>
           <div className="filter-section-title">
             <SlidersHorizontal size={16} /> <span>{t('lbl_filters')}</span>
             <button onClick={clearFilters} className="btn-text">{t('btn_clear')}</button>
           </div>
+
+          {/* Mobile filter toggle */}
+          <button
+            className="btn btn-outline btn-block filter-toggle-btn"
+            onClick={() => setFiltersExpanded(!filtersExpanded)}
+          >
+            {filtersExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            {filtersExpanded ? (lang === 'en' ? 'Hide Filters' : 'ማጣሪያ ደብቅ') : (lang === 'en' ? 'Show Filters' : 'ማጣሪያ ያሳዩ')}
+          </button>
 
           <div className="filter-group">
             <label>{t('lbl_category')}</label>
