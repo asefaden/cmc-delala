@@ -8,7 +8,12 @@ if (!JWT_SECRET && process.env.NODE_ENV === 'production') {
   throw new Error('CRITICAL SECURITY CONFIGURATION ERROR: JWT_SECRET environment variable is missing.');
 }
 
-// 1. Audit Log Helper
+// Fallback key dedicated strictly to local execution flows
+const DEV_SECRET = 'dev_fallback_secret_only_for_local';
+
+/**
+ * Audit Log Helper
+ */
 async function logSecurityEvent(eventType, userId, ipAddress, details) {
   try {
     await dbRun(
@@ -16,25 +21,30 @@ async function logSecurityEvent(eventType, userId, ipAddress, details) {
       [eventType, userId, ipAddress, details]
     );
   } catch (err) {
-    console.error("Failed to write to audit log:", err);
+    console.error("Failed to write to audit log:", err.message);
   }
 }
 
-// 2. Token generation (Optimized payload to avoid token bloat and stale data)
+/**
+ * Token generation (Optimized payload to avoid token bloat and stale data)
+ */
 function generateToken(user) {
+  const secretKey = process.env.NODE_ENV === 'production' ? JWT_SECRET : (JWT_SECRET || DEV_SECRET);
   return jwt.sign(
     { 
       id: user.id, 
       role: user.role 
     },
-    JWT_SECRET || 'cmc-delal-super-secret-key-development-2026',
+    secretKey,
     { expiresIn: '24h' }
   );
 }
 
-// 3. Authenticate Middleware
+/**
+ * Authenticate Middleware
+ */
 function authenticate(req, res, next) {
-  let token = req.cookies.token;
+  let token = req.cookies?.token;
   
   if (!token && req.headers.authorization) {
     const parts = req.headers.authorization.split(' ');
@@ -48,7 +58,8 @@ function authenticate(req, res, next) {
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET || 'cmc-delal-super-secret-key-development-2026');
+    const secretKey = process.env.NODE_ENV === 'production' ? JWT_SECRET : (JWT_SECRET || DEV_SECRET);
+    const decoded = jwt.verify(token, secretKey);
     req.user = decoded;
     next();
   } catch (err) {
@@ -56,10 +67,11 @@ function authenticate(req, res, next) {
   }
 }
 
-// 3b. Soft Authenticate - attempts auth but doesn't fail with 401 if no token
-//     Sets req.user to decoded token or null. Used for optional-auth endpoints.
+/**
+ * Soft Authenticate - optional authentication parsing context helper
+ */
 function softAuthenticate(req, res, next) {
-  let token = req.cookies.token;
+  let token = req.cookies?.token;
 
   if (!token && req.headers.authorization) {
     const parts = req.headers.authorization.split(' ');
@@ -74,14 +86,17 @@ function softAuthenticate(req, res, next) {
   }
 
   try {
-    req.user = jwt.verify(token, JWT_SECRET || 'cmc-delal-super-secret-key-development-2026');
+    const secretKey = process.env.NODE_ENV === 'production' ? JWT_SECRET : (JWT_SECRET || DEV_SECRET);
+    req.user = jwt.verify(token, secretKey);
   } catch (err) {
     req.user = null;
   }
   next();
 }
 
-// 4. Role Authorization Middleware
+/**
+ * Role Authorization Middleware
+ */
 function authorizeRoles(...roles) {
   return (req, res, next) => {
     if (!req.user || !roles.includes(req.user.role)) {
@@ -97,20 +112,19 @@ function authorizeRoles(...roles) {
   };
 }
 
-// 5. Input Sanitizer Middleware (Secure Context HTML Entity Encoding)
+/**
+ * Input Sanitizer Helper (Secure Context HTML Entity Encoding)
+ */
 function sanitizeText(str) {
   if (typeof str !== 'string') return str;
   
-  // Safely check if it's a URL structure WITHOUT dropping validation on trailing malicious injection strings
   let isPlainUrl = false;
   try {
     const parsed = new URL(str);
-    // Only trust standard web protocols with no embedded markup signals
     if ((parsed.protocol === 'http:' || parsed.protocol === 'https:') && !str.includes('<') && !str.includes('>')) {
       isPlainUrl = true;
     }
   } catch (_) {
-    // If it fails parsing as a full URL, check if it's a local root static file path safely
     if (str.startsWith('/') && !str.includes('..') && !str.includes('<') && !str.includes('>')) {
       isPlainUrl = true;
     }
@@ -127,31 +141,43 @@ function sanitizeText(str) {
     .replace(/'/g, '\u0026#x27;');
 }
 
+/**
+ * Global Request Body Sanitization Middleware
+ */
 function sanitizeBody(req, res, next) {
-  if (req.body && typeof req.body === 'object') {
-    const sanitize = (obj) => {
-      for (let key in obj) {
-        if (typeof obj[key] === 'string') {
-          obj[key] = sanitizeText(obj[key]);
-        } else if (obj[key] !== null && typeof obj[key] === 'object') {
-          sanitize(obj[key]);
+  try {
+    if (req.body && typeof req.body === 'object') {
+      const runSanitization = (obj) => {
+        for (let key in obj) {
+          if (Object.prototype.hasOwnProperty.call(obj, key)) {
+            if (typeof obj[key] === 'string') {
+              obj[key] = sanitizeText(obj[key]);
+            } else if (obj[key] !== null && typeof obj[key] === 'object') {
+              runSanitization(obj[key]);
+            }
+          }
         }
-      }
-    };
-    sanitize(req.body);
+      };
+      runSanitization(req.body);
+    }
+  } catch (err) {
+    console.error("Sanitization error intercepted safely:", err.message);
   }
-  next();
+  next(); // FIXED: Guaranteed execution prevents mid-flight application hanging
 }
 
-// 6. Secure Validation Helpers
+/**
+ * ReDoS Safe Email Validation Checks
+ */
 function validateEmail(email) {
   if (!email || typeof email !== 'string' || email.length > 254) return false;
-  // A clean, simple, production-standard check that completely mitigates catastrophic backtracking (ReDoS)
   const simpleEmailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return simpleEmailRegex.test(email);
 }
 
-// Validates and normalizes Ethiopian phone numbers to "+2519xxxxxxxx" or "+2517xxxxxxxx"
+/**
+ * Validates and normalizes Ethiopian phone numbers to "+2519xxxxxxxx" or "+2517xxxxxxxx"
+ */
 function validateAndNormalizePhone(phone) {
   if (!phone || typeof phone !== 'string') return null;
   
@@ -173,7 +199,9 @@ function validateAndNormalizePhone(phone) {
   return null;
 }
 
-// 7. Rate Limiters
+/**
+ * Rate Limiters Configurations
+ */
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, 
   max: 10, 

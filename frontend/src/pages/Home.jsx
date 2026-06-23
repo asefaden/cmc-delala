@@ -17,10 +17,11 @@ export default function Home({ lang }) {
   useEffect(() => {
     async function load() {
       try {
-        const listings = await apiRequest('/api/listings')
-        setFeatured(listings.slice(0, 3))
+        const data = await apiRequest('/api/listings')
+        const items = Array.isArray(data) ? data : (data?.listings || data?.data || [])
+        setFeatured(items.slice(0, 3))
       } catch (err) {
-        console.error(err)
+        console.error('Failed to load featured listings:', err)
       } finally {
         setLoading(false)
       }

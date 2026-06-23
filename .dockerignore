@@ -1,0 +1,44 @@
+# ===========================================
+# .dockerignore - Root
+# ===========================================
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Environment files (use env_file or environment in docker-compose.yml)
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env
+
+# Build output
+dist/
+frontend/dist/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Test
+coverage/
+**/*.test.js
+**/*.spec.js
+
+# Dev tools
+docker-compose*.yml
+README.md
+Procfile

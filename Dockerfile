@@ -1,3 +1,11 @@
+# ===========================================
+# Single-container Dockerfile (all-in-one)
+# ===========================================
+# For platforms that require a single Dockerfile (e.g., Railway, Render).
+# For local development or multi-server deployment, use:
+#   docker compose up --build
+# which uses separate frontend/ and backend/ Dockerfiles.
+
 FROM node:20-alpine AS builder
 
 WORKDIR /app/frontend

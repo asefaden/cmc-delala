@@ -33,6 +33,5 @@ coverage/
 cookies.txt
 delal.db
 
-# Uploads (user-generated content)
-backend/uploads/*
-!backend/uploads/.gitkeep
+
+

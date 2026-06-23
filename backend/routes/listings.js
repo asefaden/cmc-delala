@@ -8,10 +8,13 @@ const {
   logSecurityEvent 
 } = require('../security');
 
+// Apply sanitization middleware strictly on listings context operations
 router.use(sanitizeBody);
 
-// 1. Get Listings (with advanced search and filter)
-router.get('/', async (req, res) => {
+/**
+ * 1. Get Listings (with advanced search and filter checks)
+ */
+router.get('/', async (req, res, next) => {
   const { category, type, location, minPrice, maxPrice, search } = req.query;
 
   let query = `
@@ -58,7 +61,7 @@ router.get('/', async (req, res) => {
   try {
     const listings = await dbAll(query, params);
     
-    // Parse images array JSON
+    // Safely parse JSON array collections
     const formattedListings = listings.map(l => ({
       ...l,
       images: l.images ? JSON.parse(l.images) : []
@@ -66,13 +69,14 @@ router.get('/', async (req, res) => {
 
     return res.json(formattedListings);
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: 'Internal server error.' });
+    next(err); // Natively passes exception context down directly to Express error handlers
   }
 });
 
-// 2. Get Single Listing
-router.get('/:id', async (req, res) => {
+/**
+ * 2. Get Single Listing
+ */
+router.get('/:id', async (req, res, next) => {
   try {
     const listing = await dbGet(`
       SELECT l.*, u.full_name as broker_name, u.phone as broker_phone, 
@@ -87,18 +91,17 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Listing not found or broker suspended.' });
     }
 
-    // Parse images
     listing.images = listing.images ? JSON.parse(listing.images) : [];
-
     return res.json(listing);
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: 'Internal server error.' });
+    next(err);
   }
 });
 
-// 3. Create Listing (Brokers & Admins only)
-router.post('/', authenticate, authorizeRoles('broker', 'admin'), async (req, res) => {
+/**
+ * 3. Create Listing (Brokers & Admins authorization checks)
+ */
+router.post('/', authenticate, authorizeRoles('broker', 'admin'), async (req, res, next) => {
   const { title, description, category, type, price, currency, location, images } = req.body;
 
   if (!title || !description || !category || !type || !price || !location) {
@@ -119,12 +122,10 @@ router.post('/', authenticate, authorizeRoles('broker', 'admin'), async (req, re
     return res.status(400).json({ error: 'Invalid type. Must be rent, sale, or job.' });
   }
 
-  // Set default images if not supplied
   let imagesArray = [];
   if (images && Array.isArray(images)) {
     imagesArray = images;
   } else {
-    // Fallback premium unsplash URLs based on category
     if (category === 'real_estate') {
       imagesArray = ['https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=800'];
     } else if (category === 'vehicle') {
@@ -159,15 +160,15 @@ router.post('/', authenticate, authorizeRoles('broker', 'admin'), async (req, re
       listingId: result.id, 
       message: 'Listing published successfully!' 
     });
-
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: 'Internal server error.' });
+    next(err);
   }
 });
 
-// 4. Update Listing (Owner broker or Admin only)
-router.put('/:id', authenticate, authorizeRoles('broker', 'admin'), async (req, res) => {
+/**
+ * 4. Update Listing (Owner broker or Admin access checks)
+ */
+router.put('/:id', authenticate, authorizeRoles('broker', 'admin'), async (req, res, next) => {
   const { title, description, category, type, price, currency, location, images, status } = req.body;
 
   try {
@@ -177,13 +178,11 @@ router.put('/:id', authenticate, authorizeRoles('broker', 'admin'), async (req, 
       return res.status(404).json({ error: 'Listing not found.' });
     }
 
-    // Access control: only owner broker or admin can modify
     if (req.user.role === 'broker' && listing.broker_id !== req.user.id) {
       await logSecurityEvent('unauthorized_listing_edit_attempt', req.user.id, req.ip, `Broker attempted to edit listing ID ${req.params.id} owned by broker ID ${listing.broker_id}`);
       return res.status(403).json({ error: 'Access denied. You do not own this listing.' });
     }
 
-    // Update
     const updatedTitle = title || listing.title;
     const updatedDesc = description || listing.description;
     const updatedCat = category || listing.category;
@@ -203,15 +202,15 @@ router.put('/:id', authenticate, authorizeRoles('broker', 'admin'), async (req, 
     await logSecurityEvent('listing_updated', req.user.id, req.ip, `Updated listing ID ${req.params.id}: ${updatedTitle}`);
 
     return res.json({ success: true, message: 'Listing updated successfully.' });
-
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: 'Internal server error.' });
+    next(err);
   }
 });
 
-// 5. Delete Listing (Owner broker or Admin only)
-router.delete('/:id', authenticate, authorizeRoles('broker', 'admin'), async (req, res) => {
+/**
+ * 5. Delete Listing
+ */
+router.delete('/:id', authenticate, authorizeRoles('broker', 'admin'), async (req, res, next) => {
   try {
     const listing = await dbGet("SELECT * FROM listings WHERE id = ?", [req.params.id]);
 
@@ -219,7 +218,6 @@ router.delete('/:id', authenticate, authorizeRoles('broker', 'admin'), async (re
       return res.status(404).json({ error: 'Listing not found.' });
     }
 
-    // Access control
     if (req.user.role === 'broker' && listing.broker_id !== req.user.id) {
       await logSecurityEvent('unauthorized_listing_delete_attempt', req.user.id, req.ip, `Broker attempted to delete listing ID ${req.params.id} owned by broker ID ${listing.broker_id}`);
       return res.status(403).json({ error: 'Access denied. You do not own this listing.' });
@@ -229,10 +227,8 @@ router.delete('/:id', authenticate, authorizeRoles('broker', 'admin'), async (re
     await logSecurityEvent('listing_deleted', req.user.id, req.ip, `Deleted listing ID ${req.params.id}: ${listing.title}`);
 
     return res.json({ success: true, message: 'Listing deleted successfully.' });
-
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: 'Internal server error.' });
+    next(err);
   }
 });
 

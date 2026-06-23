@@ -1,0 +1,71 @@
+# ===========================================
+# Docker Compose - CMC Delal Platform
+# ===========================================
+# Usage:
+#   Development:  docker compose up --build
+#   Production:   docker compose -f docker-compose.yml up -d --build
+#   Stop:         docker compose down
+#   Clean:        docker compose down -v --rmi all
+#
+# Environment variables are loaded from .env file in the project root.
+# Copy .env.example to .env and fill in the values before running.
+
+services:
+  # -------------------------------------------
+  # Frontend - React SPA served by Nginx
+  # -------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ""
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - delal-network
+
+  # -------------------------------------------
+  # Backend - Node.js Express API
+  # -------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "${BACKEND_PORT:-3000}:3000"
+    env_file:
+      - ./backend/.env
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - FRONTEND_URL=http://localhost
+    volumes:
+      - uploads-data:/app/uploads
+    restart: unless-stopped
+    networks:
+      - delal-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+# -------------------------------------------
+# Volumes
+# -------------------------------------------
+volumes:
+  uploads-data:
+    driver: local
+
+# -------------------------------------------
+# Networks
+# -------------------------------------------
+networks:
+  delal-network:
+    driver: bridge

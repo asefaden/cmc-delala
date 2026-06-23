@@ -46,8 +46,8 @@ export default function Dashboard({ lang }) {
         setReviews(data.reviews || [])
         if (user.verified === 0) setShowVerifyForm(true)
       } else if (user.role === 'admin') {
-        const allListings = await apiRequest('/api/listings')
-        setListings(allListings)
+        const allData = await apiRequest('/api/listings')
+        setListings(Array.isArray(allData) ? allData : (allData?.listings || allData?.data || []))
         const allReviews = await apiRequest('/api/admin/reviews')
         setReviews(allReviews)
       }

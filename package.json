@@ -11,7 +11,8 @@
     "build": "cd frontend && npm ci && npm run build",
     "install:all": "cd frontend && npm ci && cd ../backend && npm ci",
     "start": "node backend/server.js",
-    "dev": "cd backend && npm run dev"
+    "dev": "cd backend && npm run dev",
+    "test": "jest --forceExit --detectOpenHandles"
   },
   "dependencies": {
     "bcryptjs": "2.4.3",
@@ -24,5 +25,8 @@
     "jsonwebtoken": "9.0.3",
     "multer": "1.4.5-lts.1",
     "mysql2": "3.22.5"
+  },
+  "devDependencies": {
+    "jest": "^30.4.2"
   }
 }

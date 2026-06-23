@@ -28,9 +28,8 @@ if (process.env.NODE_ENV === 'production') {
 
 const { initDb } = require('./database');
 const { apiLimiter, logSecurityEvent, sanitizeBody } = require('./security');
-
 const app = express();
-const PORT = process.env.PORT 
+const PORT = process.env.PORT || 3000; 
 
 // Variables tracking operational health
 let isDbConnected = false;
@@ -41,8 +40,7 @@ let isStarting = true;
 app.get('/health', (_req, res) => {
   const dbOk = isDbConnected;
   const status = isStarting ? 'starting' : (dbOk ? 'ok' : 'degraded');
-  const code    = isStarting ? 200 : 200;           // keep 200 so proxy stays happy
-  res.status(code).json({
+  res.status(200).json({
     status,
     database: dbOk ? 'connected' : 'disconnected',
     uptime: Math.round(process.uptime()),
@@ -63,23 +61,22 @@ app.get('/', (_req, res) => {
 // 2. Frontend configuration endpoint
 app.get('/config', (req, res) => {
   const raw = (process.env.API_BASE_URL || '').trim();
-  res.json({ apiBaseUrl: (raw && raw !== '*') ? raw : '' });
+  res.json({ apiBaseUrl: raw || '' });
 });
 
-// Security headers via Helmet
 // Security headers via Helmet
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
-      defaultSrc: ["...","'self'"],
+      defaultSrc: ["'self'"],
       scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      imgSrc: ["'self'", "data:", "blob:", "https://images.unsplash.com", "https://*.unsplash.com"],
-      // UPDATE THIS LINE: Add localhost:5173 and your cloud app domain
+      imgSrc: ["'self'", "data:", "blob:", "https://images.unsplash.com", "https://assets.unsplash.com"],
       connectSrc: [
         "'self'", 
-        "http://localhost:5173", 
+        "http://localhost:5173",
+        "https://localhost:5173",
         "http://localhost:3000",
         "https://aletcloud.com", 
         "https://cdn.jsdelivr.net"
@@ -90,13 +87,20 @@ app.use(helmet({
   crossOriginResourcePolicy: false
 }));
 
-
 // CORS Configuration
-// Supports multiple comma-separated origins in FRONTEND_URL
 const corsRaw = (process.env.FRONTEND_URL || '').trim();
-const corsOrigins = corsRaw
+let corsOrigins = corsRaw
   ? corsRaw.split(',').map(o => o.trim()).filter(Boolean)
   : [];
+
+if (process.env.NODE_ENV !== 'production' && corsOrigins.length === 0) {
+  corsOrigins.push('http://localhost:5173', 'https://localhost:5173', 'http://localhost:3000');
+}
+
+corsOrigins = corsOrigins.filter(origin => origin !== '*');
+if (corsOrigins.length === 0) {
+  corsOrigins = ['http://localhost:5173', 'https://localhost:5173', 'http://localhost:3000', 'https://delalaapp.app.aletcloud.com'];
+}
 
 const corsOptions = {
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -104,18 +108,10 @@ const corsOptions = {
   credentials: true,
 };
 
-if (corsOrigins.length === 0 || corsOrigins.includes('*')) {
-  if (process.env.NODE_ENV === 'production') {
-    console.warn('⚠️ WARNING: Allowing all origins in production without credentials.');
-  }
-  corsOptions.origin = '*';
-  corsOptions.credentials = false;
-} else if (corsOrigins.length === 1) {
+if (corsOrigins.length === 1) {
   corsOptions.origin = corsOrigins[0];
 } else {
-  // Dynamic origin check for multiple allowed origins
   corsOptions.origin = (origin, callback) => {
-    // Allow requests with no origin (e.g. server-to-server, curl)
     if (!origin) return callback(null, true);
     if (corsOrigins.includes(origin)) {
       callback(null, true);
@@ -127,35 +123,48 @@ if (corsOrigins.length === 0 || corsOrigins.includes('*')) {
 
 app.use(cors(corsOptions));
 
-// Standard Parsers
+// Standard Parsers & Sanitization
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-
-// Sanitize inputs
 app.use(sanitizeBody);
 
 // Apply global API rate limiter
 app.use('/api/', apiLimiter);
 
+// Redirect typos
+app.use('/lisintgs', (req, res) => {
+  res.redirect(301, '/api/listings' + (req.path || ''));
+});
+app.use('/listings', (req, res) => {
+  res.redirect(301, '/api/listings' + (req.path || ''));
+});
+
 // --- Mount Routes ---
 app.use('/api/auth', require('./routes/auth'));
-app.use('/api/listings', require('./routes/listings'));
 app.use('/api/brokers', require('./routes/brokers'));
 app.use('/api/admin', require('./routes/admin'));
+
+// FIXED: Mount listings route natively using a lightweight tracking middleware sequence
+const listingsRouter = require('./routes/listings');
+app.use('/api/listings', (req, res, next) => {
+  req.isListingsRequest = true;
+  next(); 
+}, listingsRouter);
 
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // API 404 handler
-app.use('/api/*', (req, res) => {
+app.all('/api/*', (req, res) => {
   res.status(404).json({ error: 'Endpoint not found.' });
 });
 
 // --- Serve Frontend (React SPA) ---
 const frontendDist = fs.existsSync(path.join(__dirname, 'dist'))
-  ? path.join(__dirname, 'dist')       // Docker: /workspace/dist
-  : path.join(__dirname, '..', 'dist'); // Local: project-root/dist
+  ? path.join(__dirname, 'dist')       
+  : path.join(__dirname, '..', 'dist'); 
+
 if (fs.existsSync(frontendDist)) {
   app.use(express.static(frontendDist));
   app.get('*', (req, res) => {
@@ -168,12 +177,60 @@ if (fs.existsSync(frontendDist)) {
   });
 }
 
-// Global Error Handler
+// Enhanced error handler for listings route (Now completely reachable!)
+app.use('/api/listings', (err, req, res, next) => {
+  console.error('Listings error boundary caught:', err);
+  
+  const userId = req.user ? req.user.id : null;
+  const errorType = err.message.toLowerCase().includes('database') ? 'database_error' : 'listings_error';
+  
+  logSecurityEvent(errorType, userId, req.ip, `Listings error: ${err.message}`)
+    .catch(console.error);
+
+  if (err.message.includes('not found') || err.message.includes('no listings')) {
+    return res.status(404).json({
+      error: 'No listings found',
+      details: err.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+  
+  if (err.message.includes('validation') || err.message.includes('invalid')) {
+    return res.status(400).json({
+      error: 'Invalid request',
+      details: err.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+  
+  if (err.message.toLowerCase().includes('database') || err.message.includes('connection') || err.message.includes('pool')) {
+    return res.status(503).json({
+      error: 'Database unavailable',
+      details: 'Unable to process data operation cleanly right now.',
+      timestamp: new Date().toISOString()
+    });
+  }
+  
+  return res.status(500).json({
+    error: 'Listings service error',
+    details: process.env.NODE_ENV === 'development' ? err.message : undefined,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Global Error Handler (Fallback stack wrapper)
 app.use((err, req, res, next) => {
   console.error("Unhandled server error:", err);
   
   logSecurityEvent('server_error', req.user ? req.user.id : null, req.ip, `Unhandled error: ${err.message}`)
     .catch(console.error);
+
+  if (req.isListingsRequest) {
+    return res.status(500).json({
+      error: 'Listings service unavailable',
+      timestamp: new Date().toISOString()
+    });
+  }
 
   return res.status(500).json({ error: 'Something went wrong on the server.' });
 });
@@ -188,9 +245,9 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('FATAL: Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
-// Graceful shutdown on SIGTERM / SIGINT (sent by Railway / Docker / process managers)
+// Graceful shutdown on SIGTERM / SIGINT
 const { getPool } = require('./database');
-let _server = null; // will be set after app.listen
+let _server = null;
 
 function gracefulShutdown(signal) {
   console.log(`\n⚠  ${signal} received – shutting down gracefully…`);
@@ -208,7 +265,6 @@ function gracefulShutdown(signal) {
       }
     });
   }
-  // Force-kill after 8 s so the platform doesn't SIGKILL us
   setTimeout(() => {
     console.error('  ✗ Forced shutdown after timeout');
     process.exit(1);
@@ -219,7 +275,6 @@ process.on('SIGINT',  () => gracefulShutdown('SIGINT'));
 
 // Bootstrap Server Setup
 async function startServer() {
-  // 1. Enforce upload directory existence
   const uploadDir = path.join(__dirname, 'uploads');
   try {
     if (!fs.existsSync(uploadDir)) {
@@ -230,7 +285,6 @@ async function startServer() {
     console.warn("WARNING: Could not create upload directory via code:", err.message);
   }
 
-  // 2. Log environment variable status (without exposing secrets)
   console.log('\n--- Environment Check ---');
   console.log(`  NODE_ENV:      ${process.env.NODE_ENV || '(not set — defaults to development)'}`);
   console.log(`  PORT:          ${PORT}`);
@@ -243,7 +297,6 @@ async function startServer() {
   console.log(`  FRONTEND_URL:  ${process.env.FRONTEND_URL || '(not set)'}`);
   console.log('--- End Environment Check ---\n');
 
-  // 3. Initialize database dependencies BEFORE opening the HTTP port to traffic
   try {
     await initDb();
     isDbConnected = true;
@@ -251,20 +304,11 @@ async function startServer() {
   } catch (err) {
     console.error('  ✗ Database: FAILED —', err.message);
     if (process.env.NODE_ENV === 'production') {
-      console.error('');
-      console.error('╔════════════════════════════════════════════════════════════╗');
-      console.error('║  DATABASE CONNECTION FAILED IN PRODUCTION                 ║');
-      console.error('╠════════════════════════════════════════════════════════════╣');
-      console.error('║  Check that these environment variables are set:         ║');
-      console.error('║    DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD       ║');
-      console.error('║  Set them in your alecloud deployment dashboard.         ║');
-      console.error('╚════════════════════════════════════════════════════════════╝');
       process.exit(1);
     }
     console.warn('  Running in development fallback mode without DB...');
   }
 
-  // 3. Start listening
   _server = app.listen(PORT, '0.0.0.0', () => {
     isStarting = false;
     const env = process.env.NODE_ENV || 'development';
