@@ -113,11 +113,11 @@ async function initDb() {
         email VARCHAR(255) UNIQUE NOT NULL,
         password_hash VARCHAR(255) NOT NULL,
         full_name VARCHAR(255) NOT NULL,
-        phone VARCHAR(50) NOT NULL,
+        phone VARCHAR(50) UNIQUE NOT NULL,
         role VARCHAR(20) NOT NULL,
         status VARCHAR(20) DEFAULT 'active',
         verified TINYINT(1) DEFAULT 0,
-        telegram_username VARCHAR(100),
+        telegram_username VARCHAR(100) UNIQUE,
         bio TEXT,
         avatar TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -182,6 +182,32 @@ async function initDb() {
         ip_address VARCHAR(45),
         details TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB
+    `);
+
+    // 6. Chat Conversations
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS chat_conversations (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        status VARCHAR(20) DEFAULT 'open',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB
+    `);
+
+    // 7. Chat Messages
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS chat_messages (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        conversation_id INT NOT NULL,
+        sender_id INT,
+        message TEXT NOT NULL,
+        is_admin_reply TINYINT(1) DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (conversation_id) REFERENCES chat_conversations(id) ON DELETE CASCADE,
+        FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE SET NULL
       ) ENGINE=InnoDB
     `);
 

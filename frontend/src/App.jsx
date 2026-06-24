@@ -13,6 +13,7 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import Admin from './pages/Admin'
+import ChatWidget from './components/ChatWidget'
 
 export default function App() {
   const { loading } = useAuth()
@@ -48,6 +49,7 @@ export default function App() {
         </Routes>
       </main>
       <Footer />
+      <ChatWidget lang={lang} />
     </>
   )
 }

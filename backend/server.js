@@ -121,6 +121,7 @@ app.use('/api/', (req, res, next) => {
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/brokers', require('./routes/brokers'));
 app.use('/api/admin', require('./routes/admin'));
+app.use('/api/chat', require('./routes/chat'));
 
 // Mount listings with path matching tracking tag
 app.use('/api/listings', (req, res, next) => {

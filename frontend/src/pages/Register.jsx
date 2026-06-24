@@ -8,7 +8,7 @@ import i18n from '../i18n'
 export default function Register({ lang }) {
   const { register } = useAuth()
   const navigate = useNavigate()
-  const [form, setForm] = useState({ full_name: '', email: '', phone: '', role: 'client', password: '' })
+  const [form, setForm] = useState({ full_name: '', email: '', phone: '', role: 'client', password: '', telegram_username: '' })
   const [showPw, setShowPw] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
@@ -52,6 +52,11 @@ export default function Register({ lang }) {
               <label>{t('lbl_phone')}</label>
               <input type="text" required value={form.phone} onChange={update('phone')} placeholder="e.g. +251912345678 or 0912345678" />
               <small className="form-help">{t('lbl_phone_help')}</small>
+            </div>
+            <div className="form-group">
+              <label>{t('lbl_telegram')}</label>
+              <input type="text" value={form.telegram_username} onChange={update('telegram_username')} placeholder="@yourusername" />
+              <small className="form-help">{t('lbl_telegram_help')}</small>
             </div>
             <div className="form-group">
               <label>{t('lbl_role')}</label>

@@ -45,12 +45,17 @@ const avatarUpload = multer({
 
 // 1. User Registration
 router.post('/register', authLimiter, async (req, res) => {
-  const { email, password, full_name, phone, role, telegram_username, bio } = req.body;
+    const { email, password, full_name, phone, role, telegram_username, bio } = req.body;
 
-  // Validate fields
-  if (!email || !password || !full_name || !phone || !role) {
-    return res.status(400).json({ error: 'All fields (email, password, full_name, phone, role) are required.' });
-  }
+    // Validate fields
+    if (!email || !password || !full_name || !phone || !role) {
+      return res.status(400).json({ error: 'All fields (email, password, full_name, phone, role) are required.' });
+    }
+
+    // Validate Telegram Username (if provided)
+    if (telegram_username && !/^@?[a-zA-Z0-9_]{5,32}$/.test(telegram_username)) {
+      return res.status(400).json({ error: 'Invalid Telegram username. It should be 5-32 characters, letters, numbers, and underscores only.' });
+    }
 
   // Validate Email
   if (!validateEmail(email)) {
@@ -73,12 +78,28 @@ router.post('/register', authLimiter, async (req, res) => {
     return res.status(400).json({ error: 'Invalid Ethiopian phone number. Please use +251..., 251..., 09..., or 07...' });
   }
 
-  try {
+    try {
     // Check if email already registered
-    const existingUser = await dbGet("SELECT id FROM users WHERE email = ?", [email.toLowerCase()]);
-    if (existingUser) {
+    const existingEmail = await dbGet("SELECT id FROM users WHERE email = ?", [email.toLowerCase()]);
+    if (existingEmail) {
       await logSecurityEvent('registration_failed_duplicate_email', null, req.ip, `Email registration attempt for already existing: ${email}`);
       return res.status(400).json({ error: 'An account with this email already exists.' });
+    }
+
+    // Check if phone already registered
+    const existingPhone = await dbGet("SELECT id FROM users WHERE phone = ?", [normalizedPhone]);
+    if (existingPhone) {
+      await logSecurityEvent('registration_failed_duplicate_phone', null, req.ip, `Phone registration attempt for already existing: ${normalizedPhone}`);
+      return res.status(400).json({ error: 'An account with this phone number already exists.' });
+    }
+
+    // Check if telegram_username already registered (if provided)
+    if (telegram_username) {
+      const existingTelegram = await dbGet("SELECT id FROM users WHERE telegram_username = ?", [telegram_username]);
+      if (existingTelegram) {
+        await logSecurityEvent('registration_failed_duplicate_telegram', null, req.ip, `Telegram registration attempt for already existing: ${telegram_username}`);
+        return res.status(400).json({ error: 'An account with this Telegram username already exists.' });
+      }
     }
 
     // Hash Password
