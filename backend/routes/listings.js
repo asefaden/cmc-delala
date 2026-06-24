@@ -8,68 +8,84 @@ const {
   logSecurityEvent 
 } = require('../security');
 
-// Apply sanitization middleware strictly on listings context operations
-router.use(sanitizeBody);
+// sanitizeBody is already applied globally in server.js — no duplicate needed here
+console.log('[listings] router module loaded');
 
 /**
  * 1. Get Listings (with advanced search and filter checks)
  */
-router.get('/', async (req, res, next) => {
-  const { category, type, location, minPrice, maxPrice, search } = req.query;
-
-  let query = `
-    SELECT l.*, u.full_name as broker_name, u.phone as broker_phone, 
-           u.telegram_username as broker_telegram, u.verified as broker_verified, u.avatar as broker_avatar
-    FROM listings l
-    JOIN users u ON l.broker_id = u.id
-    WHERE l.status = 'active' AND u.status = 'active'
-  `;
-  const params = [];
-
-  if (category) {
-    query += ` AND l.category = ?`;
-    params.push(category);
-  }
-
-  if (type) {
-    query += ` AND l.type = ?`;
-    params.push(type);
-  }
-
-  if (location) {
-    query += ` AND l.location LIKE ?`;
-    params.push(`%${location}%`);
-  }
-
-  if (minPrice) {
-    query += ` AND l.price >= ?`;
-    params.push(Number(minPrice));
-  }
-
-  if (maxPrice) {
-    query += ` AND l.price <= ?`;
-    params.push(Number(maxPrice));
-  }
-
-  if (search) {
-    query += ` AND (l.title LIKE ? OR l.description LIKE ?)`;
-    params.push(`%${search}%`, `%${search}%`);
-  }
-
-  query += ` ORDER BY l.created_at DESC`;
-
+router.get('/', async (req, res) => {
+  console.log('[listings] GET /api/listings handler entered');
   try {
-    const listings = await dbAll(query, params);
-    
-    // Safely parse JSON array collections
-    const formattedListings = listings.map(l => ({
-      ...l,
-      images: l.images ? JSON.parse(l.images) : []
-    }));
+    console.log('GET /api/listings called with query:', req.query);
 
-    return res.json(formattedListings);
+    const { category, type, location, minPrice, maxPrice, search } = req.query;
+    
+    let whereClause = "WHERE l.status = 'active'";
+    const params = [];
+
+    if (category) {
+      whereClause += " AND l.category = ?";
+      params.push(category);
+    }
+    if (type) {
+      whereClause += " AND l.type = ?";
+      params.push(type);
+    }
+    if (location) {
+      whereClause += " AND l.location LIKE ?";
+      params.push(`%${location}%`);
+    }
+    if (minPrice) {
+      whereClause += " AND l.price >= ?";
+      params.push(Number(minPrice));
+    }
+    if (maxPrice) {
+      whereClause += " AND l.price <= ?";
+      params.push(Number(maxPrice));
+    }
+    if (search) {
+      whereClause += " AND (l.title LIKE ? OR l.description LIKE ? OR l.location LIKE ?)";
+      const searchParam = `%${search}%`;
+      params.push(searchParam, searchParam, searchParam);
+    }
+
+    const query = `
+      SELECT
+        l.*,
+        u.full_name as broker_name,
+        u.phone as broker_phone,
+        u.telegram_username as broker_telegram,
+        u.verified as broker_verified,
+        u.avatar as broker_avatar
+      FROM listings l
+      LEFT JOIN users u ON l.broker_id = u.id
+      ${whereClause}
+      ORDER BY l.created_at DESC
+    `;
+
+    const listings = await dbAll(query, params);
+
+    console.log('Listings fetched:', listings.length);
+
+    const formattedListings = (listings || []).map(listing => {
+      let images = [];
+      try {
+        images = listing.images ? JSON.parse(listing.images) : [];
+      } catch (e) {
+        console.error(`Failed to parse images for listing ${listing.id}:`, e.message);
+      }
+      return { ...listing, images };
+    });
+
+    res.json(formattedListings);
+
   } catch (err) {
-    next(err); // Natively passes exception context down directly to Express error handlers
+    console.error('Listings route error:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
   }
 });
 
@@ -83,18 +99,24 @@ router.get('/:id', async (req, res, next) => {
              u.telegram_username as broker_telegram, u.verified as broker_verified, 
              u.avatar as broker_avatar, u.bio as broker_bio
       FROM listings l
-      JOIN users u ON l.broker_id = u.id
-      WHERE l.id = ? AND u.status = 'active'
+      LEFT JOIN users u ON l.broker_id = u.id
+      WHERE l.id = ?
     `, [req.params.id]);
 
     if (!listing) {
-      return res.status(404).json({ error: 'Listing not found or broker suspended.' });
+      return res.status(404).json({ error: 'Listing not found.' });
     }
 
-    listing.images = listing.images ? JSON.parse(listing.images) : [];
+    try {
+      listing.images = listing.images ? JSON.parse(listing.images) : [];
+    } catch (e) {
+      listing.images = [];
+    }
+    
     return res.json(listing);
   } catch (err) {
-    next(err);
+    console.error("Error fetching single listing:", err.message);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -161,7 +183,8 @@ router.post('/', authenticate, authorizeRoles('broker', 'admin'), async (req, re
       message: 'Listing published successfully!' 
     });
   } catch (err) {
-    next(err);
+    console.error("Error creating listing:", err.message);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -203,7 +226,8 @@ router.put('/:id', authenticate, authorizeRoles('broker', 'admin'), async (req, 
 
     return res.json({ success: true, message: 'Listing updated successfully.' });
   } catch (err) {
-    next(err);
+    console.error("Error updating listing:", err.message);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -228,7 +252,8 @@ router.delete('/:id', authenticate, authorizeRoles('broker', 'admin'), async (re
 
     return res.json({ success: true, message: 'Listing deleted successfully.' });
   } catch (err) {
-    next(err);
+    console.error("Error deleting listing:", err.message);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 });
 

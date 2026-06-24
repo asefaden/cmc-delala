@@ -1,48 +1,5 @@
-// Initialize from Vite env var (set in frontend/.env or frontend/.env.production)
-// Empty string = use Vite dev proxy (same-origin requests, no CORS issues)
-let apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').trim();
-
-// Ensure absolute apiBaseUrl has a correct protocol format if explicitly defined
-if (apiBaseUrl && !apiBaseUrl.startsWith('http://') && !apiBaseUrl.startsWith('https://')) {
-  // If explicitly developing on local localhost, preserve HTTP instead of forcing SSL HTTPS
-  if (apiBaseUrl.includes('localhost') || apiBaseUrl.includes('127.0.0.1')) {
-    apiBaseUrl = 'http://' + apiBaseUrl;
-  } else {
-    apiBaseUrl = 'https://' + apiBaseUrl;
-  }
-}
-
-// Fallback to same-origin if still empty (Crucial for Vite proxy targeting)
-if (!apiBaseUrl) {
-  apiBaseUrl = '';
-}
-
-/**
- * Fetches dynamic platform configurations from the backend at runtime.
- * This overrides build-time environment variables so you don't have to rebuild
- * the frontend when changing backend URLs.
- */
-export async function fetchConfig() {
-  try {
-    // If apiBaseUrl is empty, this fetches natively from the same port relative origin '/config'
-    const res = await fetch(`${apiBaseUrl}/config`);
-    if (!res.ok) return; 
-    
-    const config = await res.json();
-    const raw = (config.apiBaseUrl || '').trim();
-    
-    if (raw) {
-      if (!raw.startsWith('http://') && !raw.startsWith('https://')) {
-        apiBaseUrl = raw.includes('localhost') ? 'http://' + raw : 'https://' + raw;
-      } else {
-        apiBaseUrl = raw;
-      }
-    }
-  } catch (err) {
-    // Suppressed locally since proxy abstracts this context step seamlessly during dev
-    console.debug("Dynamic platform configuration lookup fallback applied:", err.message);
-  }
-}
+// Initialize strictly from Vite env var (set in frontend/.env or frontend/.env.production)
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').trim();
 
 /**
  * Global HTTP request wrapper for communicating with the CMC Delal API endpoints.
@@ -56,7 +13,7 @@ export async function apiRequest(endpoint, options = {}) {
     ...fetchOptions.headers,
   };
   
-  // CRITICAL: Needed so cookies/tokens pass safely across origins via your proxy setup
+  // CRITICAL: Needed so cookies/tokens pass safely across origins
   fetchOptions.credentials = 'include';
 
   // Ensure path concatenation formats cleanly without duplicate slashes

@@ -23,34 +23,35 @@ export default function Listings({ lang }) {
   const t = (key) => i18n[lang]?.[key] || key
 
   // Load listings from the API
+// Load listings from the API
   useEffect(() => {
-    let cancelled = false
+    let cancelled = false;
 
     async function load() {
-      setLoading(true)
-      setError(null)
+      setLoading(true);
+      setError(null);
       try {
-        const queryString = searchParams.toString()
-        const endpoint = queryString ? `/api/listings?${queryString}` : '/api/listings'
-        const data = await apiRequest(endpoint)
-        if (cancelled) return
-        const items = Array.isArray(data) ? data : (data?.listings || data?.data || [])
-        setListings(Array.isArray(items) ? items : [])
+        // Use a static string for the search params to prevent object reference loops
+        const queryString = searchParams.toString();
+        const endpoint = queryString ? `/api/listings?${queryString}` : '/api/listings';
+        
+        const data = await apiRequest(endpoint);
+        if (cancelled) return;
+        
+        const items = Array.isArray(data) ? data : (data?.listings || data?.data || []);
+        setListings(items);
       } catch (err) {
-        if (cancelled) return
-        console.error('Failed to load listings:', err)
-        setError(
-          err?.message ||
-          (lang === 'en' ? 'Failed to load listings. Please try again.' : 'ዝርዝሮችን ማስፈንት አልተሳካም። እባኮት እንደገና ይሞክሩ።')
-        )
+        if (cancelled) return;
+        setError(err?.message || 'Error loading listings');
       } finally {
-        if (!cancelled) setLoading(false)
+        if (!cancelled) setLoading(false);
       }
     }
 
-    load()
-    return () => { cancelled = true }
-  }, [searchParams, lang])
+    load();
+    return () => { cancelled = true };
+    // Only re-run if searchParams string representation changes, or lang changes
+  }, [searchParams.toString(), lang]);
 
   // Sync filter inputs with URL params
   useEffect(() => {

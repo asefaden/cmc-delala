@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react'
-import { apiRequest, fetchConfig } from '../api'
+import { apiRequest } from '../api';
 
 const AuthContext = createContext(null)
 
@@ -9,7 +9,6 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     async function init() {
-      await fetchConfig()
       await checkSession()
       setLoading(false)
     }
@@ -26,14 +25,21 @@ export function AuthProvider({ children }) {
     }
   }
 
-  async function login(email, password) {
-    const res = await apiRequest('/api/auth/login', {
+const login = async (email, password) => {
+  try {
+    const data = await apiRequest('/api/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
-    })
-    setUser(res.user)
-    return res
+      body: JSON.stringify({ email, password }) // <-- 'body:' የሚለውን እዚህ ላይ ጨምረነዋል
+    });
+    
+    if (data && data.success) {
+      setUser(data.user);
+      return data.user;
+    }
+  } catch (err) {
+    throw err;
   }
+};
 
   async function logout() {
     await apiRequest('/api/auth/logout', { method: 'POST' })

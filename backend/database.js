@@ -6,32 +6,71 @@ let pool;
 
 /**
  * Executes a write query (INSERT, UPDATE, DELETE)
+ * Wraps pool.query in a race with a timeout to prevent indefinite hangs
  */
 const dbRun = async (sql, params = []) => {
   if (!pool) throw new Error("Database connection pool not initialized.");
-  const [result] = await pool.execute(sql, params);
-  return { 
-    id: result.insertId || null, 
-    changes: result.affectedRows || 0 
-  };
+  
+  const timeoutMs = 15000;
+  const queryPromise = pool.query(sql, params);
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error(`Query timed out after ${timeoutMs}ms`)), timeoutMs);
+  });
+
+  try {
+    const [result] = await Promise.race([queryPromise, timeoutPromise]);
+    return { 
+      id: result?.insertId || null, 
+      changes: result?.affectedRows || 0 
+    };
+  } catch (err) {
+    console.error(`Database Runtime Error [dbRun]: ${err.message}`);
+    throw err;
+  }
 };
 
 /**
  * Executes a query that returns a single row
+ * Wraps pool.query in a race with a timeout to prevent indefinite hangs
  */
 const dbGet = async (sql, params = []) => {
   if (!pool) throw new Error("Database connection pool not initialized.");
-  const [rows] = await pool.execute(sql, params);
-  return rows.length > 0 ? rows[0] : null;
+  
+  const timeoutMs = 15000;
+  const queryPromise = pool.query(sql, params);
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error(`Query timed out after ${timeoutMs}ms`)), timeoutMs);
+  });
+
+  try {
+    const [rows] = await Promise.race([queryPromise, timeoutPromise]);
+    return (rows && rows.length > 0) ? rows[0] : null;
+  } catch (err) {
+    console.error(`Database Runtime Error [dbGet]: ${err.message}`);
+    throw err;
+  }
 };
 
 /**
  * Executes a query that returns all rows
+ * Wraps pool.query in a race with a timeout to prevent indefinite hangs
  */
 const dbAll = async (sql, params = []) => {
   if (!pool) throw new Error("Database connection pool not initialized.");
-  const [rows] = await pool.execute(sql, params);
-  return rows;
+  
+  const timeoutMs = 15000;
+  const queryPromise = pool.query(sql, params);
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error(`Query timed out after ${timeoutMs}ms`)), timeoutMs);
+  });
+
+  try {
+    const [rows] = await Promise.race([queryPromise, timeoutPromise]);
+    return rows || [];
+  } catch (err) {
+    console.error(`Database Runtime Error [dbAll]: ${err.message}`);
+    throw err;
+  }
 };
 
 // Initialize database schema and handle safe seeding
@@ -41,11 +80,12 @@ async function initDb() {
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
-    port: parseInt(process.env.DB_PORT, 10) || 3306,
+    port: parseInt(process.env.DB_POR, 10) || 3306,
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,
-    connectTimeout: 10000,   
+    connectTimeout: 10000,
+    acquireTimeout: 10000,
     enableKeepAlive: true,
     keepAliveInitialDelay: 10000
   });
@@ -62,7 +102,6 @@ async function initDb() {
     console.log('  ✓ MySQL connection verified');
   } catch (err) {
     console.error('  ✗ MySQL connection verification failed:', err.code || err.message);
-    console.error('  → Connection Check:', { host: process.env.DB_HOST, user: process.env.DB_USER, db: process.env.DB_NAME });
     throw new Error(`Database connection failed: ${err.message}`);
   }
 
@@ -158,7 +197,6 @@ async function initDb() {
       const broker2Hash = await bcrypt.hash("BrokerKebede123!", 10);
       const clientHash = await bcrypt.hash("ClientAbenezer123!", 10);
 
-      // Seed Users
       const [adminRes] = await connection.execute(`
         INSERT INTO users (email, password_hash, full_name, phone, role, verified, bio, avatar)
         VALUES (?, ?, ?, ?, 'admin', 1, 'System Administrator for CMC Delal', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150')
@@ -184,7 +222,6 @@ async function initDb() {
       const cId = cRes.insertId;
 
       if (b1Id && b2Id && cId) {
-        // Seed Listings
         await connection.execute(`
           INSERT INTO listings (broker_id, title, description, category, type, price, currency, location, images)
           VALUES (?, ?, ?, 'real_estate', 'rent', 45000, 'ETB', 'Bole Atlas', ?)
@@ -215,33 +252,24 @@ async function initDb() {
           JSON.stringify(['https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800'])
         ]);
 
-        // Seed Review
         await connection.execute(`
           INSERT INTO reviews (broker_id, client_id, rating, comment)
           VALUES (?, ?, 5, 'Abeba was extremely professional and helped me secure my apartment in Bole Atlas within 3 days. Highly recommended!')
         `, [b1Id, cId]);
 
         console.log("  → Seeded initial database tables cleanly.");
-      } else {
-        console.warn("  ⚠ Seeding skipped: Relational reference user IDs could not be resolved.");
       }
     }
   } catch (schemaError) {
     console.error(" ✗ Schema compilation or seeding crash encountered:", schemaError.message);
     throw schemaError;
   } finally {
-    // Ensure connection is ALWAYS freed back to the pool pool
     if (connection) connection.release();
   }
 }
 
-/**
- * Clears all tables and re-seeds the database safely.
- */
 async function resetDb() {
-  console.log("Resetting database...");
   if (!pool) throw new Error("Database connection pool not initialized.");
-  
   await pool.query("SET FOREIGN_KEY_CHECKS = 0");
   await pool.query("TRUNCATE TABLE reviews");
   await pool.query("TRUNCATE TABLE listings");
@@ -249,8 +277,6 @@ async function resetDb() {
   await pool.query("TRUNCATE TABLE security_logs");
   await pool.query("TRUNCATE TABLE users");
   await pool.query("SET FOREIGN_KEY_CHECKS = 1");
-  
-  console.log("Database cleared. Re-seeding...");
   await initDb();
 }
 
