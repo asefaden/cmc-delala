@@ -18,7 +18,7 @@ if (process.env.NODE_ENV === 'production') {
     console.error('║  environment variables.                                  ║');
     console.error('╚════════════════════════════════════════════════════════════╝');
     console.error('Required env vars: JWT_SECRET, DB_HOST, DB_USER, DB_PASSWORD, DB_NAME');
-    console.error('Set these in your alecloud deployment dashboard.');
+    console.error('Set these in your cloud deployment dashboard.');
     process.exit(1);
   }
 } else {
@@ -46,22 +46,6 @@ app.get('/health', (_req, res) => {
     uptime: Math.round(process.uptime()),
     timestamp: new Date().toISOString()
   });
-});
-
-// Root – lightweight landing that confirms the service is alive
-app.get('/', (_req, res) => {
-  res.json({
-    name: 'CMC Delal Backend',
-    version: '1.0.0',
-    status: isStarting ? 'starting' : 'ok',
-    health: '/health'
-  });
-});
-
-// 2. Frontend configuration endpoint
-app.get('/config', (req, res) => {
-  const raw = (process.env.API_BASE_URL || '').trim();
-  res.json({ apiBaseUrl: raw || '' });
 });
 
 // Security headers via Helmet
@@ -123,6 +107,12 @@ if (corsOrigins.length === 1) {
 
 app.use(cors(corsOptions));
 
+// --- Config endpoint (placed after CORS middleware) ---
+app.get('/config', (req, res) => {
+  const raw = (process.env.API_BASE_URL || '').trim();
+  res.json({ apiBaseUrl: raw || '' });
+});
+
 // Standard Parsers & Sanitization
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -132,20 +122,14 @@ app.use(sanitizeBody);
 // Apply global API rate limiter
 app.use('/api/', apiLimiter);
 
-// Redirect typos
-app.use('/lisintgs', (req, res) => {
-  res.redirect(301, '/api/listings' + (req.path || ''));
-});
-app.use('/listings', (req, res) => {
-  res.redirect(301, '/api/listings' + (req.path || ''));
-});
+
 
 // --- Mount Routes ---
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/brokers', require('./routes/brokers'));
 app.use('/api/admin', require('./routes/admin'));
 
-// FIXED: Mount listings route natively using a lightweight tracking middleware sequence
+// Mount listings route natively using a lightweight tracking middleware sequence
 const listingsRouter = require('./routes/listings');
 app.use('/api/listings', (req, res, next) => {
   req.isListingsRequest = true;
@@ -155,29 +139,14 @@ app.use('/api/listings', (req, res, next) => {
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// API 404 handler
+// API 404 handler (Acts as a fallback boundaries for invalid backend endpoints)
 app.all('/api/*', (req, res) => {
   res.status(404).json({ error: 'Endpoint not found.' });
 });
 
-// --- Serve Frontend (React SPA) ---
-const frontendDist = fs.existsSync(path.join(__dirname, 'dist'))
-  ? path.join(__dirname, 'dist')       
-  : path.join(__dirname, '..', 'dist'); 
+// --- Centralized API Error Boundaries ---
 
-if (fs.existsSync(frontendDist)) {
-  app.use(express.static(frontendDist));
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(frontendDist, 'index.html'));
-  });
-} else {
-  console.warn('  ⚠ Frontend dist/ folder not found at:', frontendDist);
-  app.get('*', (req, res) => {
-    res.status(404).json({ error: 'Frontend not built. Run npm run build.' });
-  });
-}
-
-// Enhanced error handler for listings route (Now completely reachable!)
+// Enhanced error handler for listings route (Catches exceptions from routes safely)
 app.use('/api/listings', (err, req, res, next) => {
   console.error('Listings error boundary caught:', err);
   
@@ -234,6 +203,24 @@ app.use((err, req, res, next) => {
 
   return res.status(500).json({ error: 'Something went wrong on the server.' });
 });
+
+// --- Serve Frontend (React SPA Wildcard Fallback) ---
+// CRITICAL: Placed below the API error routes to prevent early text/html intercepts!
+const frontendDist = fs.existsSync(path.join(__dirname, 'dist'))
+  ? path.join(__dirname, 'dist')       
+  : path.join(__dirname, '..', 'dist'); 
+
+if (fs.existsSync(frontendDist)) {
+  app.use(express.static(frontendDist));
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(frontendDist, 'index.html'));
+  });
+} else {
+  console.warn('  ⚠ Frontend dist/ folder not found at:', frontendDist);
+  app.get('*', (req, res) => {
+    res.status(404).json({ error: 'Frontend not built. Run npm run build.' });
+  });
+}
 
 // Graceful Process Interception
 process.on('uncaughtException', (err) => {

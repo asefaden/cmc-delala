@@ -66,7 +66,8 @@ export async function apiRequest(endpoint, options = {}) {
   try {
     const res = await fetch(fullUrl, fetchOptions);
 
-    // Handle non-JSON responses gracefully (stops unexpected token '<' crashes)
+    if (res.status === 204) return undefined;
+
     const contentType = res.headers.get('content-type');
     let data;
     if (contentType && contentType.includes('application/json')) {

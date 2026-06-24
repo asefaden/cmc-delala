@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom'
 import { MapPin, ShieldCheck } from 'lucide-react'
 import i18n from '../i18n'
+// Import the helper utility you updated earlier
+import { getApiBaseUrl } from '../api' 
 
 const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=800'
 const DEFAULT_AVATAR = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'
@@ -22,10 +24,9 @@ function formatType(type, lang = 'en') {
 }
 
 export default function ListingCard({ listing, lang = 'en' }) {
-  // Localization context fallback template
   const t = (key) => i18n[lang]?.[key] || key;
 
-  // SAFE PARSING: Handle potential raw string payloads directly from MySQL text field schemas
+  // Safe parsing helper setup
   let parsedImages = [];
   try {
     if (Array.isArray(listing.images)) {
@@ -37,10 +38,22 @@ export default function ListingCard({ listing, lang = 'en' }) {
     console.error("Error parsing images array within card context UI:", err);
   }
 
-  // Target image configuration setup
-  const imgUrl = parsedImages && parsedImages.length > 0 ? parsedImages[0] : DEFAULT_IMAGE;
+  // Get current active base path (e.g., http://localhost:3000)
+  const baseUrl = getApiBaseUrl();
 
-  // Broker verification identity translation mapping state
+  // FIXED: Format local image paths as absolute server resources so they don't hit the SPA fallback router
+  let rawImgUrl = parsedImages && parsedImages.length > 0 ? parsedImages[0] : DEFAULT_IMAGE;
+  if (rawImgUrl.startsWith('/uploads')) {
+    rawImgUrl = `${baseUrl}${rawImgUrl}`;
+  }
+  const imgUrl = rawImgUrl;
+
+  // Format broker avatar path absolutely if necessary
+  let brokerAvatar = listing.broker_avatar || DEFAULT_AVATAR;
+  if (brokerAvatar.startsWith('/uploads')) {
+    brokerAvatar = `${baseUrl}${brokerAvatar}`;
+  }
+
   const isVerified = listing.broker_verified === 1 || listing.broker_verified === true || listing.broker_verified === '1';
 
   return (
@@ -51,10 +64,9 @@ export default function ListingCard({ listing, lang = 'en' }) {
           alt={listing.title || 'Listing'}
           className="listing-card-img"
           onError={(e) => { 
-            // FIXED: Prevent infinite fallback event looping loops if network connection states degrade
-            if (e.target.src !== DEFAULT_IMAGE) {
-              e.target.src = DEFAULT_IMAGE;
-            }
+            // Ground the error event completely to stop recursive looping loops
+            e.target.onerror = null; 
+            e.target.src = DEFAULT_IMAGE;
           }}
         />
         <div className="listing-card-price">{formatPrice(listing.price, listing.currency, lang)}</div>
@@ -72,13 +84,12 @@ export default function ListingCard({ listing, lang = 'en' }) {
         <div className="listing-card-footer">
           <div className="broker-mini-info">
             <img
-              src={listing.broker_avatar || DEFAULT_AVATAR}
+              src={brokerAvatar}
               alt={listing.broker_name || 'Broker'}
               className="broker-mini-avatar"
               onError={(e) => {
-                if (e.target.src !== DEFAULT_AVATAR) {
-                  e.target.src = DEFAULT_AVATAR;
-                }
+                e.target.onerror = null;
+                e.target.src = DEFAULT_AVATAR;
               }}
             />
             <span className="broker-mini-name">{listing.broker_name || ''}</span>
